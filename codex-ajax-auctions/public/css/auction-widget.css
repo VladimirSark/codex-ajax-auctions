@@ -1005,16 +1005,15 @@
  * ------------------------------------------------------------------ */
 .codfaa-auction-experience {
 	background-color: #f6f8ff;
-	background-image: radial-gradient(#d7def5 1px, transparent 0);
-	background-size: 22px 22px;
 	padding: 2.75rem 0 4rem;
 	color: #111321;
 }
 
 .codfaa-container {
-	max-width: 1120px;
-	margin: 0 auto;
-	padding: 0 1.5rem;
+	width: 100%;
+	max-width: none;
+	margin: 0;
+	padding: 0 2.5rem;
 }
 
 .codfaa-auction-layout {
