@@ -1,0 +1,126 @@
+.codfaa-dashboard-table td.codfaa-dashboard-actions {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.codfaa-dashboard-table .button-link {
+	padding: 0;
+	height: auto;
+	line-height: 1.5;
+}
+
+.codfaa-dashboard-table .button-primary,
+.codfaa-dashboard-table .button-secondary,
+.codfaa-dashboard-table .button {
+	margin-top: 4px;
+}
+
+.codfaa-dashboard-table tbody tr td {
+	vertical-align: middle;
+}
+
+.codfaa-dashboard > p {
+	max-width: 720px;
+}
+
+.codfaa-dashboard-focus {
+	background: #fff;
+	border: 1px solid #dfe1e4;
+	padding: 16px 20px;
+	margin-bottom: 20px;
+	border-radius: 4px;
+}
+
+.codfaa-dashboard-focus h2 {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-top: 0;
+}
+
+.codfaa-state-layout {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 24px;
+	align-items: flex-start;
+}
+
+.codfaa-state-list {
+	flex: 1 1 260px;
+	min-width: 260px;
+}
+
+.codfaa-state-detail {
+	flex: 2 1 480px;
+	background: #fff;
+	border: 1px solid #dfe1e4;
+	padding: 20px;
+	border-radius: 4px;
+}
+
+.codfaa-detail-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
+.codfaa-detail-actions form {
+	display: inline-block;
+	margin-left: 8px;
+}
+
+.codfaa-detail-actions .button {
+	margin-bottom: 6px;
+}
+
+.codfaa-detail-meta {
+	list-style: disc;
+	padding-left: 20px;
+}
+
+.codfaa-detail-section {
+	margin-top: 24px;
+}
+
+.codfaa-participant-actions {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.codfaa-reason-field {
+	min-width: 160px;
+}
+
+.codfaa-email-form .widefat {
+	max-width: 100%;
+}
+
+.codfaa-state-list table tr.current {
+	background-color: #f3f6ff;
+}
+
+@media (max-width: 960px) {
+	.codfaa-state-layout {
+		flex-direction: column;
+	}
+}
+
+.codfaa-settings-card {
+	background: #fff;
+	border: 1px solid #dfe1e4;
+	padding: 20px;
+	border-radius: 8px;
+	max-width: 720px;
+}
+
+.codfaa-settings__intro {
+	max-width: 720px;
+}
+
+.codfaa-settings-table .regular-text {
+	max-width: 420px;
+}
