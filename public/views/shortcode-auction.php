@@ -124,7 +124,13 @@ $modal_id         = 'codfaa-product-modal-' . ( $auction_id ? $auction_id : wp_g
 
           <!-- Buttons under description -->
           <div class="mt-4 flex items-center gap-4">
-            <button type="button" class="px-4 py-2 rounded-xl bg-black text-white text-sm" data-quick-view="open" data-modal-target="<?php echo esc_attr( $modal_id ); ?>">
+            <button
+              type="button"
+              class="px-4 py-2 rounded-xl bg-black text-white text-sm"
+              data-quick-view="open"
+              data-modal-target="<?php echo esc_attr( $modal_id ); ?>"
+              onclick="codfaaToggleModal('<?php echo esc_js( $modal_id ); ?>', true);"
+            >
               <?php esc_html_e( 'Quick View', 'codex-ajax-auctions' ); ?>
             </button>
             <?php if ( $product_view_url ) : ?>
@@ -368,7 +374,7 @@ $modal_id         = 'codfaa-product-modal-' . ( $auction_id ? $auction_id : wp_g
           <h3 class="text-lg font-semibold text-gray-900"><?php echo esc_html( $product_name ); ?></h3>
           <p class="text-sm text-gray-500 mt-1"><?php echo wp_kses_post( $product_price_html ); ?></p>
         </div>
-        <button type="button" class="text-gray-500 hover:text-gray-900" data-modal-close>
+        <button type="button" class="text-gray-500 hover:text-gray-900" data-modal-close onclick="codfaaToggleModal('<?php echo esc_js( $modal_id ); ?>', false);">
           <span class="sr-only"><?php esc_html_e( 'Close quick view', 'codex-ajax-auctions' ); ?></span>
           &times;
         </button>
@@ -447,7 +453,8 @@ $modal_id         = 'codfaa-product-modal-' . ( $auction_id ? $auction_id : wp_g
 
     const fakeNames = ['Anon***1','Anon***2','Anon***3','Anon***4'];
 
-    const productModal = document.getElementById('<?php echo esc_js( $modal_id ); ?>');
+    const quickViewModalId = '<?php echo esc_js( $modal_id ); ?>';
+    const productModal = document.getElementById( quickViewModalId );
     const quickViewTriggers = document.querySelectorAll('[data-modal-target="<?php echo esc_js( $modal_id ); ?>"]');
 
     let lobbyPct, registered, preSec, liveSec, liveInterval, lastBidder, myBids, autoOutbids, ended;
@@ -681,38 +688,44 @@ $modal_id         = 'codfaa-product-modal-' . ( $auction_id ? $auction_id : wp_g
 
     resetAll();
 
-    if ( productModal && quickViewTriggers.length ) {
-      const closeButtons = productModal.querySelectorAll('[data-modal-close]');
+    window.codfaaToggleModal = window.codfaaToggleModal || function( id, shouldOpen ) {
+      var modal = document.getElementById( id );
+      if ( ! modal ) {
+        return;
+      }
 
-      const openModal = function() {
-        productModal.classList.remove('hidden');
-        productModal.setAttribute('aria-hidden', 'false');
-        document.body.classList.add('overflow-hidden');
-      };
+      if ( shouldOpen ) {
+        modal.classList.remove( 'hidden' );
+        modal.setAttribute( 'aria-hidden', 'false' );
+        document.body.classList.add( 'overflow-hidden' );
+      } else {
+        modal.classList.add( 'hidden' );
+        modal.setAttribute( 'aria-hidden', 'true' );
+        document.body.classList.remove( 'overflow-hidden' );
+      }
+    };
 
-      const closeModal = function() {
-        productModal.classList.add('hidden');
-        productModal.setAttribute('aria-hidden', 'true');
-        document.body.classList.remove('overflow-hidden');
-      };
-
+    if ( quickViewTriggers.length ) {
       quickViewTriggers.forEach((btn) => {
-        btn.addEventListener('click', openModal);
+        btn.addEventListener('click', () => window.codfaaToggleModal( quickViewModalId, true ));
       });
+    }
 
+    if ( productModal ) {
+      const closeButtons = productModal.querySelectorAll('[data-modal-close]');
       closeButtons.forEach((btn) => {
-        btn.addEventListener('click', closeModal);
+        btn.addEventListener('click', () => window.codfaaToggleModal( quickViewModalId, false ));
       });
 
       productModal.addEventListener('click', (event) => {
-        if (event.target === productModal) {
-          closeModal();
+        if ( event.target === productModal ) {
+          window.codfaaToggleModal( quickViewModalId, false );
         }
       });
 
       document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && !productModal.classList.contains('hidden')) {
-          closeModal();
+        if ( event.key === 'Escape' && ! productModal.classList.contains('hidden') ) {
+          window.codfaaToggleModal( quickViewModalId, false );
         }
       });
     }
