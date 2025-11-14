@@ -64,7 +64,8 @@ $share_notice   = __( 'Registration complete. Lobby is filling—share the aucti
 $can_join  = $registration_obj && $is_logged_in && ! $is_registered && ! $registration_pending;
 $login_url = wp_login_url( isset( $display_url ) ? $display_url : home_url() );
 
-$consent_disabled = $is_registered || $registration_pending;
+$consent_disabled = $is_registered || $registration_pending || $lobby_full_blocking;
+$lobby_full_blocking = ! $is_registered && ! $registration_pending && $progress_percent >= 100;
 ?>
 <!doctype html>
 <html lang="en">
@@ -250,6 +251,9 @@ $consent_disabled = $is_registered || $registration_pending;
             <p class="text-sm text-gray-700" data-codfaa-register-success <?php echo $is_registered ? '' : 'style="display:none;"'; ?>><?php echo esc_html( $share_notice ); ?></p>
             <p class="text-sm text-gray-700" data-codfaa-registration-pending <?php echo ( $registration_pending && ! $is_registered ) ? '' : 'style="display:none;"'; ?>><?php echo esc_html( $pending_notice ); ?></p>
             <p class="text-sm text-rose-600" data-codfaa-register-error style="display:none;"></p>
+            <?php if ( $lobby_full_blocking ) : ?>
+              <p class="text-sm text-rose-600" data-codfaa-lobby-full><?php esc_html_e( 'Lobby is full. Registration is currently closed.', 'codex-ajax-auctions' ); ?></p>
+            <?php endif; ?>
 
             <label class="flex items-start gap-3 text-sm text-gray-700">
               <input
@@ -267,7 +271,11 @@ $consent_disabled = $is_registered || $registration_pending;
             </label>
             <p class="text-sm text-rose-600" data-codfaa-consent-hint <?php echo $consent_disabled ? 'style="display:none;"' : ''; ?>><?php esc_html_e( 'Please accept the Terms & Conditions to enable registration.', 'codex-ajax-auctions' ); ?></p>
 
-            <?php if ( ! $is_logged_in ) : ?>
+            <?php if ( $lobby_full_blocking ) : ?>
+              <button class="w-full px-4 py-3 rounded-xl bg-gray-200 text-gray-500 text-sm font-medium" disabled>
+                <?php esc_html_e( 'Lobby full. Registration closed.', 'codex-ajax-auctions' ); ?>
+              </button>
+            <?php elseif ( ! $is_logged_in ) : ?>
               <a class="w-full inline-flex justify-center px-4 py-3 rounded-xl bg-black text-white text-sm font-medium" href="<?php echo esc_url( $login_url ); ?>">
                 <?php esc_html_e( 'Log in to join', 'codex-ajax-auctions' ); ?>
               </a>
