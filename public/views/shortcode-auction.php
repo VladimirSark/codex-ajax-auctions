@@ -361,7 +361,7 @@ $modal_id         = 'codfaa-product-modal-' . ( $auction_id ? $auction_id : wp_g
     </div>
   </footer>
 
-  <div id="<?php echo esc_attr( $modal_id ); ?>" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 px-4" aria-hidden="true" role="dialog">
+  <div id="<?php echo esc_attr( $modal_id ); ?>" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/60 px-4" aria-hidden="true" role="dialog">
     <div class="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl" data-modal-dialog>
       <div class="flex items-start justify-between gap-4">
         <div>
