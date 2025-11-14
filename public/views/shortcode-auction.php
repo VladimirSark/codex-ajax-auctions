@@ -249,6 +249,7 @@ $consent_disabled = $is_registered || $registration_pending;
 
             <p class="text-sm text-gray-700" data-codfaa-register-success <?php echo $is_registered ? '' : 'style="display:none;"'; ?>><?php echo esc_html( $share_notice ); ?></p>
             <p class="text-sm text-gray-700" data-codfaa-registration-pending <?php echo ( $registration_pending && ! $is_registered ) ? '' : 'style="display:none;"'; ?>><?php echo esc_html( $pending_notice ); ?></p>
+            <p class="text-sm text-rose-600" data-codfaa-register-error style="display:none;"></p>
 
             <label class="flex items-start gap-3 text-sm text-gray-700">
               <input
@@ -548,7 +549,7 @@ $consent_disabled = $is_registered || $registration_pending;
       });
     });
 
-    document.addEventListener('keydown', function(event) {
+  document.addEventListener('keydown', function(event) {
       if (event.key !== 'Escape') {
         return;
       }
@@ -558,6 +559,155 @@ $consent_disabled = $is_registered || $registration_pending;
         }
       });
     });
+  });
+  </script>
+
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    var card = document.querySelector('.codfaa-auction-card');
+    if ( ! card ) {
+      return;
+    }
+
+    var consent      = card.querySelector('[data-codfaa-consent]');
+    var consentHint  = card.querySelector('[data-codfaa-consent-hint]');
+    var registerBtn  = card.querySelector('.codfaa-register');
+    var shareNote    = card.querySelector('[data-codfaa-register-success]');
+    var pendingNote  = card.querySelector('[data-codfaa-registration-pending]');
+    var errorNote    = card.querySelector('[data-codfaa-register-error]');
+    var progressBar  = card.querySelector('[data-codfaa-progress-bar]');
+    var progressText = card.querySelector('[data-codfaa-progress-label]');
+    var statusText   = card.querySelector('[data-codfaa-register-card] .text-xl');
+    var s1Check      = document.getElementById('s1Check');
+    var s1Lock       = document.getElementById('s1Lock');
+    var step2Body    = document.getElementById('step2Body');
+
+    if ( ! registerBtn ) {
+      return;
+    }
+
+    var initialLabel = registerBtn.textContent.trim();
+
+    function toggleRegisterAvailability() {
+      if ( ! consent ) {
+        registerBtn.disabled = false;
+        registerBtn.setAttribute('aria-disabled', 'false');
+        return;
+      }
+
+      var disabled = consent.disabled ? false : ! consent.checked;
+      registerBtn.disabled = disabled;
+      registerBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+      if ( consentHint && ! consent.disabled ) {
+        consentHint.style.display = disabled ? 'block' : 'none';
+      }
+    }
+
+    if ( consent ) {
+      consent.addEventListener('change', toggleRegisterAvailability);
+    }
+    toggleRegisterAvailability();
+
+    registerBtn.addEventListener('click', function( event ) {
+      event.preventDefault();
+
+      if ( registerBtn.disabled || registerBtn.dataset.processing === '1' ) {
+        return;
+      }
+
+      var config = window.CodfaaAuctionRegistration || null;
+      if ( ! config ) {
+        console.warn( 'CodfaaAuctionRegistration config missing.' );
+        return;
+      }
+
+      registerBtn.dataset.processing = '1';
+      registerBtn.classList.add('opacity-70');
+      registerBtn.textContent = registerBtn.dataset.loading || '<?php echo esc_js( __( 'Processing…', 'codex-ajax-auctions' ) ); ?>';
+      var registrationCompleted = false;
+
+      var payload = new URLSearchParams();
+      payload.append( 'action', 'codfaa_register' );
+      payload.append( 'nonce', config.nonce );
+      payload.append( 'auction_id', registerBtn.getAttribute( 'data-auction' ) );
+      payload.append( 'source_url', registerBtn.getAttribute( 'data-return' ) || window.location.href );
+
+      fetch( config.ajaxUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+        body: payload.toString()
+      } ).then( function( response ) {
+        return response.json().catch( function() { return {}; } );
+      } ).then( function( data ) {
+        if ( data && data.success ) {
+          registrationCompleted = true;
+          handleRegistrationSuccess( data.data || {} );
+          return;
+        }
+        handleRegistrationError( data && data.data ? data.data : {} );
+      } ).catch( function( error ) {
+        console.error( error );
+        handleRegistrationError( {} );
+      } ).finally( function() {
+        registerBtn.dataset.processing = '';
+        registerBtn.classList.remove('opacity-70');
+        if ( ! registrationCompleted ) {
+          registerBtn.textContent = initialLabel;
+        }
+      } );
+    } );
+
+    function handleRegistrationSuccess( payload ) {
+      if ( shareNote ) {
+        shareNote.style.display = 'block';
+      }
+      if ( pendingNote ) {
+        pendingNote.style.display = 'none';
+      }
+      if ( errorNote ) {
+        errorNote.style.display = 'none';
+      }
+      if ( progressBar ) {
+        progressBar.style.width = '100%';
+      }
+      if ( progressText ) {
+        progressText.textContent = '<?php echo esc_js( __( 'Lobby progress: 100%', 'codex-ajax-auctions' ) ); ?>';
+      }
+      if ( statusText ) {
+        statusText.textContent = '<?php echo esc_js( __( 'Registered', 'codex-ajax-auctions' ) ); ?>';
+        statusText.classList.remove('text-rose-700', 'text-amber-700');
+        statusText.classList.add('text-green-700');
+      }
+      registerBtn.disabled = true;
+      registerBtn.setAttribute( 'aria-disabled', 'true' );
+      registerBtn.textContent = '<?php echo esc_js( __( 'Registered successfully', 'codex-ajax-auctions' ) ); ?>';
+
+      if ( s1Check ) {
+        s1Check.classList.remove('hidden');
+      }
+      if ( s1Lock ) {
+        s1Lock.classList.add('hidden');
+      }
+      if ( step2Body ) {
+        step2Body.classList.remove('hidden');
+      }
+
+      if ( payload && payload.redirect ) {
+        window.location.href = payload.redirect;
+      }
+    }
+
+    function handleRegistrationError( payload ) {
+      if ( errorNote ) {
+        errorNote.textContent = payload && payload.message ? payload.message : '<?php echo esc_js( __( 'Unable to register right now. Please try again.', 'codex-ajax-auctions' ) ); ?>';
+        errorNote.style.display = 'block';
+      }
+
+      if ( payload && payload.redirect ) {
+        window.location.href = payload.redirect;
+      }
+    }
   });
   </script>
 </body>
