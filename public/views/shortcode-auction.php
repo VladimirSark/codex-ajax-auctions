@@ -72,6 +72,12 @@ $prelive_initial_display  = gmdate( 'i:s', $prelive_initial_secs );
 $prelive_bar_initial      = ( $prelive_duration > 0 && $prelive_initial_secs < $prelive_duration )
 	? ( ( ( $prelive_duration - $prelive_initial_secs ) / max( 1, $prelive_duration ) ) * 100 )
 	: 0;
+
+$prelive_initial_secs     = max( 0, (int) $prelive_remaining );
+$prelive_initial_display  = gmdate( 'i:s', $prelive_initial_secs );
+$prelive_bar_initial      = ( $prelive_duration > 0 && $prelive_initial_secs < $prelive_duration )
+	? ( ( ( $prelive_duration - $prelive_initial_secs ) / max( 1, $prelive_duration ) ) * 100 )
+	: 0;
 ?>
 <!doctype html>
 <html lang="en">
@@ -80,6 +86,10 @@ $prelive_bar_initial      = ( $prelive_duration > 0 && $prelive_initial_secs < $
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script src="https://cdn.tailwindcss.com"></script>
   <title>Pay-Per-Bid Auctions</title>
+
+  <style>
+    [data-codfaa-register-card].is-hidden { display: none !important; }
+  </style>
 </head>
 <body class="bg-white text-gray-900">
 
@@ -211,7 +221,7 @@ $prelive_bar_initial      = ( $prelive_duration > 0 && $prelive_initial_secs < $
       <!-- RIGHT: 4-step demo flow (folded & locked stages) -->
       <div id="demo" class="space-y-6">
         <!-- STEP 1: Registration -->
-        <div class="border rounded-2xl p-6 shadow-sm" data-codfaa-register-card>
+        <div class="border rounded-2xl p-6 shadow-sm<?php echo $lobby_full_blocking ? " is-hidden" : ""; ?>" data-codfaa-register-card>
           <div class="flex items-center justify-between gap-2">
             <div class="flex items-center gap-2">
               <span class="inline-flex items-center justify-center h-7 w-7 rounded-full bg-black text-white text-xs font-semibold">1</span>
@@ -335,7 +345,7 @@ $prelive_bar_initial      = ( $prelive_duration > 0 && $prelive_initial_secs < $
             </div>
           </div>
 
-          <div id="step2Body" class="mt-4 hidden" data-codfaa-prelive-wrapper>
+          <div id="step2Body" class="mt-4 <?php echo ( $ready || $lobby_full_blocking ) ? "" : "hidden"; ?>" data-codfaa-prelive-wrapper>
             <div class="flex items-center justify-between">
               <p class="text-sm text-gray-700">
                 We’re giving all participants some time to get ready.
@@ -573,6 +583,29 @@ $prelive_bar_initial      = ( $prelive_duration > 0 && $prelive_initial_secs < $
         }
       });
     });
+    if ( ! window.CodfaaAuctionRegistration ) {
+      var preWrapper = card.querySelector('[data-codfaa-prelive-wrapper]');
+      var preTimer = card.querySelector('[data-codfaa-prelive-timer]');
+      var preBar = card.querySelector('[data-codfaa-timer-progress]');
+      var cardPreSeconds = parseInt(card.getAttribute('data-prelive'), 10) || 0;
+      var cardPreTotal = parseInt(card.getAttribute('data-prelive-total'), 10) || cardPreSeconds;
+      if ( preWrapper && !preWrapper.classList.contains('hidden') && cardPreSeconds > 0 && preTimer ) {
+        var fallbackTimer = setInterval(function() {
+          cardPreSeconds = Math.max(0, cardPreSeconds - 1);
+          var minutes = Math.floor(cardPreSeconds / 60).toString().padStart(2, '0');
+          var seconds = (cardPreSeconds % 60).toString().padStart(2, '0');
+          preTimer.textContent = minutes + ':' + seconds;
+          if ( preBar && cardPreTotal > 0 ) {
+            var pct = ((cardPreTotal - cardPreSeconds) / cardPreTotal) * 100;
+            preBar.style.width = Math.min(100, Math.max(0, pct)) + '%';
+          }
+          if ( cardPreSeconds <= 0 ) {
+            clearInterval(fallbackTimer);
+          }
+        }, 1000);
+        window.addEventListener('beforeunload', function() { clearInterval(fallbackTimer); });
+      }
+    }
   });
   </script>
 
