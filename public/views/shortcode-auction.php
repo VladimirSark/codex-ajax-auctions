@@ -1,434 +1,591 @@
 <?php
 /**
- * Auction shortcode view tailored to the UI mockups.
+ * Standalone auction demo template matching the provided Tailwind markup.
  */
 
 defined( 'ABSPATH' ) || exit;
-
-$product_image      = $product ? $product->get_image() : '<img src="' . esc_url( wc_placeholder_img_src() ) . '" alt="" />';
-$product_name       = $product ? $product->get_name() : get_the_title( $auction );
-$product_price      = $product ? $product->get_price_html() : __( 'Price not available', 'codex-ajax-auctions' );
-$registration_price = $registration ? $registration->get_price_html() : __( 'Not set', 'codex-ajax-auctions' );
-$bid_fee_price      = $bid_product ? $bid_product->get_price_html() : __( 'Not set', 'codex-ajax-auctions' );
-$progress_percent   = max( 0, min( 100, round( $progress_percent ) ) );
-$progress_label     = sprintf(
-	__( 'Progress: %s%%', 'codex-ajax-auctions' ),
-	number_format_i18n( $progress_percent )
-);
-
-if ( ! isset( $prelive_initial_formatted ) ) {
-	$prelive_initial_formatted = $prelive_remaining > 0 ? gmdate( 'i:s', $prelive_remaining ) : '00:00';
-}
-
-$product_short_description = '';
-
-if ( $product instanceof WC_Product ) {
-	$product_short_description = $product->get_short_description();
-
-	if ( '' === trim( $product_short_description ) ) {
-		$product_short_description = $product->get_description();
-	}
-}
-
-$product_short_description = $product_short_description ? wpautop( $product_short_description ) : '';
-$modal_id                 = 'codfaa-product-modal-' . $auction->ID;
-
-$initial_timer_formatted = isset( $initial_remaining_formatted )
-	? $initial_remaining_formatted
-	: gmdate( 'i:s', max( 0, (int) $initial_remaining ) );
-
-$prelive_total = isset( $prelive_duration ) ? max( 0, (int) $prelive_duration ) : 0;
-if ( $prelive_total <= 0 && $prelive_remaining > 0 ) {
-	$prelive_total = $prelive_remaining;
-}
-$prelive_progress = $prelive_total > 0 ? max( 0, min( 100, ( $prelive_remaining / $prelive_total ) * 100 ) ) : 0;
-
-$timer_progress = ( $timer > 0 && $initial_remaining >= 0 ) ? max( 0, min( 100, ( $initial_remaining / $timer ) * 100 ) ) : 0;
-$show_live_timer = ( isset( $current_state ) && \Codfaa\Auctions\Bidding_Service::STATE_LIVE === $current_state ) || $ended;
-
-$status_card_variant = $initial_status_variant ? $initial_status_variant : 'info';
-$status_card_classes = 'codfaa-bid-stat codfaa-bid-stat--state codfaa-bid-stat--' . sanitize_html_class( $status_card_variant );
-$status_card_hidden  = trim( (string) $initial_status_message ) === '' ? 'style="display:none;"' : '';
-
-$ready_lock_copy      = __( 'Well done, lobby is full. We are giving everyone time to get ready.', 'codex-ajax-auctions' );
-$registered_lock_copy = __( 'You are registered. Wait for the pre-live countdown.', 'codex-ajax-auctions' );
-$lock_message         = '';
-if ( ! $ended && \Codfaa\Auctions\Bidding_Service::STATE_LIVE !== $current_state ) {
-	if ( $ready && $prelive_remaining > 0 ) {
-		$lock_message = $ready_lock_copy;
-	} elseif ( $is_registered ) {
-		$lock_message = $registered_lock_copy;
-	} else {
-		$lock_message = __( 'Complete Step 1 & wait for the pre-live countdown.', 'codex-ajax-auctions' );
-	}
-}
-$lock_overlay_copy = $lock_message ? $lock_message : __( 'Complete Step 1 & wait for the pre-live countdown.', 'codex-ajax-auctions' );
-$is_locked         = ! $ended && \Codfaa\Auctions\Bidding_Service::STATE_LIVE !== $current_state;
-
-$winner_claim_total_display = isset( $winner_claim_total_display ) && $winner_claim_total_display ? $winner_claim_total_display : $winner_total_display;
-
-$result_text    = '';
-$result_variant = '';
-if ( $ended ) {
-	if ( $user_is_winner ) {
-		$result_text    = __( "You're the winner", 'codex-ajax-auctions' );
-		$result_variant = 'win';
-	} else {
-		$result_text    = __( 'You lost this time. No further payments are required.', 'codex-ajax-auctions' );
-		$result_variant = 'lost';
-	}
-}
-
-$history_note = __( 'Every bid resets the timer. When it hits zero, the last bidder wins.', 'codex-ajax-auctions' );
-$bid_history  = ! empty( $recent_bidders ) ? $recent_bidders : array();
-
-$register_copy         = sprintf( __( 'Register for %s', 'codex-ajax-auctions' ), wp_strip_all_tags( $registration_price ) );
-$can_join              = $registration && $is_logged_in && ! $is_registered && ! $registration_pending;
-$login_url             = wp_login_url( $display_url );
-$register_status_class = $is_registered ? 'is-success' : ( $registration_pending ? 'is-warning' : 'is-muted' );
-$register_status_label = $is_registered ? __( 'Registered', 'codex-ajax-auctions' ) : ( $registration_pending ? __( 'Pending approval', 'codex-ajax-auctions' ) : __( 'Not registered', 'codex-ajax-auctions' ) );
-
-$bid_button_classes = 'codfaa-btn codfaa-btn--dark codfaa-place-bid';
-if ( $can_bid ) {
-	$bid_button_classes .= ' is-active';
-}
-
-$claim_classes = 'codfaa-btn codfaa-claim-prize codfaa-claim-btn';
-if ( $ended && $user_is_winner && ! $winner_claimed ) {
-	$claim_classes .= ' is-visible';
-}
-
-$pending_notice = __( 'Registration received. Waiting for admin confirmation.', 'codex-ajax-auctions' );
-$share_message  = __( 'Wait for other participants. Share to reach 100%.', 'codex-ajax-auctions' );
-
-$registration_stage_classes = 'codfaa-stage codfaa-stage--registration';
-if ( $is_registered || $ended ) {
-	$registration_stage_classes .= ' is-complete';
-} else {
-	$registration_stage_classes .= ' is-active';
-}
-
-$countdown_stage_classes = 'codfaa-stage codfaa-stage--countdown codfaa-stage--foldable';
-$countdown_completed     = ( \Codfaa\Auctions\Bidding_Service::STATE_LIVE === $current_state ) || $ended;
-$countdown_active        = ! $countdown_completed && $ready && $is_registered;
-if ( $countdown_completed ) {
-	$countdown_stage_classes .= ' is-complete';
-} elseif ( $countdown_active ) {
-	$countdown_stage_classes .= ' is-active';
-} else {
-	$countdown_stage_classes .= ' is-locked';
-}
-if ( ! $countdown_active ) {
-	$countdown_stage_classes .= ' is-folded';
-}
-
-$live_stage_classes = 'codfaa-stage codfaa-stage--live codfaa-bid-card codfaa-stage--foldable';
-if ( $ended ) {
-	$live_stage_classes .= ' is-complete';
-} elseif ( \Codfaa\Auctions\Bidding_Service::STATE_LIVE === $current_state ) {
-	$live_stage_classes .= ' is-active';
-} else {
-	$live_stage_classes .= ' is-locked';
-}
-if ( \Codfaa\Auctions\Bidding_Service::STATE_LIVE !== $current_state || $ended ) {
-	$live_stage_classes .= ' is-folded';
-}
-
-$ended_stage_classes = 'codfaa-stage codfaa-stage--result codfaa-stage--foldable';
-if ( $ended ) {
-	$ended_stage_classes .= ' is-active is-complete';
-} else {
-	$ended_stage_classes .= ' is-locked';
-}
-if ( ! $ended ) {
-	$ended_stage_classes .= ' is-folded';
-}
-
-$claim_value_text = $winner_claim_total_display ? wp_strip_all_tags( $winner_claim_total_display ) : wp_strip_all_tags( $registration_price );
-$timer_label      = $timer ? sprintf( _n( '%d sec.', '%d sec.', $timer, 'codex-ajax-auctions' ), $timer ) : __( 'Timer TBD', 'codex-ajax-auctions' );
-
-if ( ! function_exists( 'codfaa_stage_icon_markup' ) ) {
-	function codfaa_stage_icon_markup( $type ) {
-		if ( 'check' === $type ) {
-			return '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8.1 13.2l-3.3-3.3-1.4 1.4 4.7 4.7 8-8-1.4-1.4z" /></svg>';
-		}
-
-		if ( 'lock' === $type ) {
-			return '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path fill="currentColor" d="M14 8h-1V6a3 3 0 0 0-6 0v2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2zm-6-2a2 2 0 0 1 4 0v2H8zm6 10H6v-6h8z" /></svg>';
-		}
-
-		return '';
-	}
-}
 ?>
-<div class="codfaa-auction-experience codfaa-auction-card"
-	data-auction="<?php echo esc_attr( $auction->ID ); ?>"
-	data-timer="<?php echo esc_attr( $timer ); ?>"
-	data-remaining="<?php echo esc_attr( max( 0, (int) $initial_remaining ) ); ?>"
-	data-participants="<?php echo esc_attr( $participant_count ); ?>"
-	data-required="<?php echo esc_attr( $required ); ?>"
-	data-progress="<?php echo esc_attr( $progress_percent ); ?>"
-	data-state="<?php echo esc_attr( $current_state ); ?>"
-	data-last-bid-user="<?php echo esc_attr( $last_bid_user ); ?>"
-	data-last-bid-display="<?php echo esc_attr( $last_bid_display ); ?>"
-	data-status-variant="<?php echo esc_attr( $initial_status_variant ); ?>"
-	data-initial-status="<?php echo esc_attr( $initial_status_message ); ?>"
-	data-can-bid="<?php echo esc_attr( $can_bid ? 1 : 0 ); ?>"
-	data-ended="<?php echo esc_attr( $ended ? 1 : 0 ); ?>"
-	data-ready="<?php echo esc_attr( $ready ? 1 : 0 ); ?>"
-	data-prelive="<?php echo esc_attr( $prelive_remaining ); ?>"
-	data-prelive-total="<?php echo esc_attr( $prelive_total ); ?>"
-	data-go-live="<?php echo esc_attr( $go_live_at ); ?>"
-	data-user-registered="<?php echo esc_attr( $is_registered ? 1 : 0 ); ?>"
-	data-user-winner="<?php echo esc_attr( $user_is_winner ? 1 : 0 ); ?>"
-	data-registration-pending="<?php echo esc_attr( $registration_pending ? 1 : 0 ); ?>"
-	data-winner-claimed="<?php echo esc_attr( $winner_claimed ? 1 : 0 ); ?>"
-	data-winner-total-display="<?php echo esc_attr( wp_strip_all_tags( $winner_total_display ) ); ?>"
-	data-winner-bid-count="<?php echo esc_attr( $winner_bid_count ); ?>"
->
-	<div class="codfaa-container">
-		<div class="codfaa-auction-layout">
-			<section class="codfaa-product-panel">
-				<div class="codfaa-product-frame">
-					<div class="codfaa-product-media"><?php echo wp_kses_post( $product_image ); ?></div>
-					<div class="codfaa-product-summary">
-						<h2><?php echo esc_html( $product_name ); ?></h2>
-						<ul class="codfaa-product-bullets">
-							<li>
-								<strong><?php esc_html_e( 'Retail price:', 'codex-ajax-auctions' ); ?></strong>
-								<?php echo wp_kses_post( $product_price ); ?>
-							</li>
-							<li>
-								<?php printf( esc_html__( 'Claim it for %s at checkout if you win.', 'codex-ajax-auctions' ), esc_html( $claim_value_text ) ); ?>
-							</li>
-						</ul>
-						<div class="codfaa-product-cta">
-							<button type="button" class="codfaa-btn codfaa-btn--ghost" data-codfaa-modal-open="<?php echo esc_attr( $modal_id ); ?>"><?php esc_html_e( 'Quick view', 'codex-ajax-auctions' ); ?></button>
-							<?php if ( ! empty( $product_link ) ) : ?>
-								<a class="codfaa-product-link" target="_blank" rel="noopener" href="<?php echo esc_url( $product_link ); ?>"><?php esc_html_e( 'View product', 'codex-ajax-auctions' ); ?></a>
-							<?php endif; ?>
-						</div>
-					</div>
-				</div>
-				<div class="codfaa-product-meta">
-					<article>
-						<p><?php esc_html_e( 'Bid fee', 'codex-ajax-auctions' ); ?></p>
-						<strong><?php echo wp_kses_post( $bid_fee_price ); ?></strong>
-					</article>
-					<article>
-						<p><?php esc_html_e( 'Timer', 'codex-ajax-auctions' ); ?></p>
-						<strong><?php echo esc_html( $timer_label ); ?></strong>
-					</article>
-				</div>
-			</section>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Pay-Per-Bid Auctions</title>
+</head>
+<body class="bg-white text-gray-900">
 
-			<section class="codfaa-stage-stack">
-				<article class="<?php echo esc_attr( $registration_stage_classes ); ?>" data-codfaa-stage="registration" data-codfaa-register-card>
-					<header class="codfaa-stage__header">
-						<div class="codfaa-stage__title">
-							<span class="codfaa-stage__badge">1</span>
-							<div>
-								<p><?php esc_html_e( 'Registration', 'codex-ajax-auctions' ); ?></p>
-								<small data-codfaa-progress-label><?php echo esc_html( $progress_label ); ?></small>
-							</div>
-						</div>
-						<div class="codfaa-stage__status">
-							<span class="codfaa-stage__status-icon codfaa-stage__status-icon--check" aria-hidden="true"><?php echo codfaa_stage_icon_markup( 'check' ); ?></span>
-							<span class="codfaa-stage__status-icon codfaa-stage__status-icon--lock" aria-hidden="true"><?php echo codfaa_stage_icon_markup( 'lock' ); ?></span>
-						</div>
-					</header>
-					<div class="codfaa-progress codfaa-progress--registration">
-						<div class="codfaa-progress__bar" data-codfaa-progress-bar style="width: <?php echo esc_attr( $progress_percent ); ?>%;"></div>
-					</div>
-					<div class="codfaa-register-pills">
-						<article>
-							<p><?php esc_html_e( 'Registration fee', 'codex-ajax-auctions' ); ?></p>
-							<strong><?php echo wp_kses_post( $registration_price ); ?></strong>
-						</article>
-						<article class="codfaa-register-pill codfaa-register-pill--<?php echo esc_attr( $register_status_class ); ?>">
-							<p><?php esc_html_e( 'Status', 'codex-ajax-auctions' ); ?></p>
-							<strong class="codfaa-register-state codfaa-register-state--<?php echo esc_attr( $is_registered ? 'success' : ( $registration_pending ? 'pending' : 'muted' ) ); ?>">
-								<?php echo esc_html( $register_status_label ); ?>
-							</strong>
-						</article>
-					</div>
+  <!-- HOW IT WORKS – top -->
+  <section id="how" class="bg-gray-50">
+    <div class="mx-auto max-w-6xl px-4 py-16">
+      <h2 class="text-2xl font-bold">How It Works</h2>
+      <div class="mt-8 grid md:grid-cols-4 gap-6">
+        <div class="p-6 border rounded-2xl">
+          <h3 class="font-semibold">1) Register</h3>
+          <p class="text-sm text-gray-700 mt-2">Pay a small registration fee and secure your spot.</p>
+        </div>
+        <div class="p-6 border rounded-2xl">
+          <h3 class="font-semibold">2) Pre-Live</h3>
+          <p class="text-sm text-gray-700 mt-2">When the lobby is full, a short countdown starts.</p>
+        </div>
+        <div class="p-6 border rounded-2xl">
+          <h3 class="font-semibold">3) Bid Live</h3>
+          <p class="text-sm text-gray-700 mt-2">Each bid costs a preset amount. Timer resets on each bid.</p>
+        </div>
+        <div class="p-6 border rounded-2xl">
+          <h3 class="font-semibold">4) Win or Keep</h3>
+          <p class="text-sm text-gray-700 mt-2">If the timer hits 0 after your bid, you win. If outbid, you don’t pay (demo).</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
-					<p class="codfaa-register-note" data-codfaa-registration-pending <?php echo $registration_pending && ! $is_registered ? '' : 'style="display:none;"'; ?>><?php echo esc_html( $pending_notice ); ?></p>
-					<p class="codfaa-register-note codfaa-register-note--success" data-codfaa-register-success <?php echo $is_registered ? '' : 'style="display:none;"'; ?>><?php echo esc_html( $share_message ); ?></p>
+  <!-- PRODUCT + STAGES -->
+  <section class="mx-auto max-w-6xl px-4 py-16">
+    <div class="grid md:grid-cols-2 gap-10 items-start md:items-stretch">
+      <!-- LEFT: Product window -->
+      <div class="flex flex-col h-full">
+        <div class="border rounded-2xl p-6 shadow-sm flex-1">
+          <div class="flex items-center justify-between">
+            <strong>Gymtek Mini Bike XMB200 (LCD)</strong>
+            <span class="text-sm text-gray-500">Retail: €50</span>
+          </div>
 
-<?php $consent_disabled = $is_registered || $registration_pending; ?>
-					<label class="codfaa-legal-checkbox">
-						<input type="checkbox" class="codfaa-register-consent" data-codfaa-consent="1" <?php echo $consent_disabled ? 'checked="checked" disabled="disabled"' : ''; ?> />
-						<span>
-							<?php esc_html_e( 'Accept Terms & Conditions', 'codex-ajax-auctions' ); ?>
-							<?php if ( $terms_content ) : ?>
-								<button type="button" class="codfaa-terms-link" data-codfaa-terms-open="1"><?php esc_html_e( 'Read', 'codex-ajax-auctions' ); ?></button>
-							<?php endif; ?>
-						</span>
-					</label>
-<?php $consent_hint_style = $consent_disabled ? 'style="display:none;"' : 'style="display:block;"'; ?>
-					<p class="codfaa-consent-hint" data-codfaa-consent-hint <?php echo $consent_hint_style; ?>><?php esc_html_e( 'Please accept the Terms & Conditions to enable registration.', 'codex-ajax-auctions' ); ?></p>
+          <!-- Bigger image -->
+          <div class="mt-4">
+            <img
+              decoding="async"
+              src="https://www.1ba.lt/wp-content/uploads/2025/11/Gymtek-Mini-Bike-XMB200-LCD-1400x1400-1.webp"
+              alt="Gymtek Mini Bike XMB200"
+              class="w-full max-h-80 mx-auto rounded-xl object-contain border"
+            >
+          </div>
 
-					<div class="codfaa-register-actions">
-						<?php if ( ! $is_logged_in ) : ?>
-							<a class="codfaa-btn codfaa-btn--dark codfaa-btn--full" href="<?php echo esc_url( $login_url ); ?>"><?php esc_html_e( 'Log in to join', 'codex-ajax-auctions' ); ?></a>
-						<?php elseif ( ! $registration ) : ?>
-							<button class="codfaa-btn codfaa-btn--dark codfaa-btn--full" disabled="disabled"><?php esc_html_e( 'Registration unavailable', 'codex-ajax-auctions' ); ?></button>
-						<?php elseif ( $is_registered ) : ?>
-							<button class="codfaa-btn codfaa-btn--success codfaa-btn--full" disabled="disabled"><?php esc_html_e( 'Registered successfully', 'codex-ajax-auctions' ); ?></button>
-						<?php elseif ( $registration_pending ) : ?>
-							<button class="codfaa-btn codfaa-btn--dark codfaa-btn--full" disabled="disabled"><?php esc_html_e( 'Awaiting confirmation', 'codex-ajax-auctions' ); ?></button>
-						<?php elseif ( $can_join ) : ?>
-							<button type="button" class="codfaa-btn codfaa-btn--success codfaa-btn--full codfaa-register" data-auction="<?php echo esc_attr( $auction->ID ); ?>" data-return="<?php echo esc_url( $display_url ); ?>" aria-disabled="true" disabled="disabled"><?php echo esc_html( $register_copy ); ?></button>
-						<?php else : ?>
-							<button class="codfaa-btn codfaa-btn--dark codfaa-btn--full" disabled="disabled"><?php esc_html_e( 'Join unavailable', 'codex-ajax-auctions' ); ?></button>
-						<?php endif; ?>
-					</div>
-				</article>
-				<article class="<?php echo esc_attr( $countdown_stage_classes ); ?>" data-codfaa-stage="countdown">
-					<header class="codfaa-stage__header">
-						<div class="codfaa-stage__title">
-							<span class="codfaa-stage__badge">2</span>
-							<p><?php esc_html_e( 'Countdown to live', 'codex-ajax-auctions' ); ?></p>
-						</div>
-						<div class="codfaa-stage__status">
-							<span class="codfaa-stage__status-icon codfaa-stage__status-icon--check" aria-hidden="true"><?php echo codfaa_stage_icon_markup( 'check' ); ?></span>
-							<span class="codfaa-stage__status-icon codfaa-stage__status-icon--lock" aria-hidden="true"><?php echo codfaa_stage_icon_markup( 'lock' ); ?></span>
-						</div>
-					</header>
-					<div class="codfaa-stage__body">
-						<div class="codfaa-countdown-card">
-							<div class="codfaa-countdown-card__clock" data-codfaa-lock-countdown <?php echo ( $ready && $prelive_remaining > 0 && ! $ended ) ? '' : 'style="display:none;"'; ?>>
-								<span class="codfaa-countdown-card__value" data-codfaa-lock-timer><?php echo esc_html( $prelive_initial_formatted ); ?></span>
-								<small><?php esc_html_e( 'remaining', 'codex-ajax-auctions' ); ?></small>
-							</div>
-							<p class="codfaa-countdown-card__note">
-								<?php esc_html_e( "We're giving all participants some time to get ready!", 'codex-ajax-auctions' ); ?>
-							</p>
-						</div>
-					</div>
-				</article>
-				<article class="<?php echo esc_attr( $live_stage_classes ); ?>" data-codfaa-stage="live">
-					<div class="codfaa-stage__body codfaa-bid-card__body">
-						<header class="codfaa-stage__header codfaa-stage__header--live">
-							<div class="codfaa-stage__title">
-								<span class="codfaa-stage__badge">3</span>
-								<p><?php esc_html_e( 'Live bidding', 'codex-ajax-auctions' ); ?></p>
-							</div>
-							<div class="codfaa-stage__meta" data-codfaa-timer-wrapper <?php echo $show_live_timer ? '' : 'style="display:none;"'; ?>>
-								<span><?php esc_html_e( 'Timer:', 'codex-ajax-auctions' ); ?></span>
-								<strong data-codfaa-timer><?php echo esc_html( $initial_timer_formatted ); ?></strong>
-							</div>
-						</header>
-						<p class="codfaa-stage__hint" data-codfaa-timer-pending <?php echo $show_live_timer || $ended ? 'style="display:none;"' : ''; ?>>
-							<?php esc_html_e( 'Timer will appear once the auction is live.', 'codex-ajax-auctions' ); ?>
-						</p>
+          <!-- Info under image -->
+          <div class="mt-4 text-sm text-gray-700 space-y-1">
+            <p><span class="font-medium">Retail:</span> €50</p>
+            <p>• Claim it for €1 at checkout if you win.</p>
+            <p>• Registration fee: €1</p>
+            <p>• Bid fee: €1 per bid</p>
+            <p class="pt-2">
+              Compact mini bike trainer with LCD display for time, distance and calories. Perfect for
+              under-desk pedaling or low-impact home workouts.
+            </p>
+          </div>
 
-						<div class="codfaa-progress codfaa-progress--live">
-							<div class="codfaa-progress__bar" data-codfaa-live-progress style="width: <?php echo esc_attr( $timer_progress ); ?>%;"></div>
-						</div>
+          <!-- Buttons under description -->
+          <div class="mt-4 flex items-center gap-4">
+            <button class="px-4 py-2 rounded-xl bg-black text-white text-sm">
+              Quick View
+            </button>
+            <a href="#" class="text-sm text-gray-800 underline">
+              View product
+            </a>
+          </div>
+        </div>
 
-						<button type="button" class="<?php echo esc_attr( $bid_button_classes ); ?>" data-auction="<?php echo esc_attr( $auction->ID ); ?>" <?php echo $can_bid ? '' : 'aria-disabled="true" disabled="disabled"'; ?>>
-							<?php printf( esc_html__( 'Place bid (%s)', 'codex-ajax-auctions' ), wp_strip_all_tags( $bid_fee_price ) ); ?>
-						</button>
+        <div class="mt-6 flex gap-6 text-sm text-gray-600">
+          <span>Secure payments</span><span>•</span><span>Anonymized bidders</span><span>•</span><span>Transparent timers</span>
+        </div>
+      </div>
 
-						<div class="codfaa-bid-stats">
-							<article class="codfaa-bid-stat">
-								<p><?php esc_html_e( 'Your bids', 'codex-ajax-auctions' ); ?></p>
-								<strong data-codfaa-bid-count><?php echo esc_html( $user_bid_count ); ?></strong>
-							</article>
-							<article class="codfaa-bid-stat">
-								<p><?php esc_html_e( 'Your cost', 'codex-ajax-auctions' ); ?></p>
-								<strong data-codfaa-bid-total data-minor="<?php echo esc_attr( $user_total_minor ); ?>"><?php echo wp_kses_post( $user_total_display ); ?></strong>
-							</article>
-							<article class="<?php echo esc_attr( $status_card_classes ); ?>" data-codfaa-status-card <?php echo $status_card_hidden; ?>>
-								<p><?php esc_html_e( 'Status', 'codex-ajax-auctions' ); ?></p>
-								<strong data-codfaa-status><?php echo esc_html( $initial_status_message ); ?></strong>
-							</article>
-						</div>
+      <!-- RIGHT: 4-step demo flow (folded & locked stages) -->
+      <div id="demo" class="space-y-6">
+        <!-- STEP 1: Registration -->
+        <div class="border rounded-2xl p-6 shadow-sm">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center justify-center h-7 w-7 rounded-full bg-black text-white text-xs font-semibold">1</span>
+              <h2 class="text-lg font-semibold">Registration</h2>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="s1Check" class="hidden text-green-600">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </span>
+              <span id="s1Lock" class="hidden text-gray-500">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        d="M17 11V8a5 5 0 10-10 0v3"/>
+                  <rect x="6" y="11" width="12" height="9" rx="2" ry="2" stroke-width="2"/>
+                </svg>
+              </span>
+            </div>
+          </div>
 
-						<div class="codfaa-bid-history">
-							<h3><?php esc_html_e( 'History', 'codex-ajax-auctions' ); ?></h3>
-							<ul data-codfaa-recent-bidders>
-								<?php if ( $bid_history ) : ?>
-									<?php foreach ( $bid_history as $bidder ) : ?>
-										<li>
-											<span class="codfaa-recent__name"><?php echo esc_html( $bidder['name'] ); ?></span>
-											<?php if ( ! empty( $bidder['timestamp'] ) ) : ?>
-												<time datetime="<?php echo esc_attr( $bidder['timestampRaw'] ?? '' ); ?>"><?php echo esc_html( $bidder['timestamp'] ); ?></time>
-											<?php endif; ?>
-											<?php if ( ! empty( $bidder['totalDisplay'] ) ) : ?>
-												<span class="codfaa-recent__amount"><?php echo wp_kses_post( $bidder['totalDisplay'] ); ?></span>
-											<?php endif; ?>
-										</li>
-									<?php endforeach; ?>
-								<?php else : ?>
-									<li class="codfaa-recent__empty"><?php esc_html_e( 'No bids yet.', 'codex-ajax-auctions' ); ?></li>
-								<?php endif; ?>
-							</ul>
-							<p class="codfaa-bid-note"><?php echo esc_html( $history_note ); ?></p>
-						</div>
-					</div>
+          <div id="step1Body" class="mt-4">
+            <div>
+              <div class="h-3 w-full bg-gray-200 rounded">
+                <div id="lobbyBar" class="h-3 bg-black rounded" style="width:70%"></div>
+              </div>
+              <p id="lobbyText" class="mt-1 text-sm text-gray-700">Lobby progress: 70%</p>
+            </div>
 
-					<div class="codfaa-bid-card__overlay" data-codfaa-lock aria-hidden="<?php echo $is_locked ? 'false' : 'true'; ?>">
-						<div class="codfaa-lock-icon" aria-hidden="true">
-							<span class="codfaa-lock-icon__ring"></span>
-							<span class="codfaa-lock-icon__body"></span>
-						</div>
-						<p class="codfaa-lock-message" data-codfaa-lock-message><?php echo esc_html( $lock_overlay_copy ); ?></p>
-						<p class="codfaa-lock-countdown" data-codfaa-lock-countdown <?php echo ( $ready && $prelive_remaining > 0 && ! $ended ) ? '' : 'style="display:none;"'; ?>>
-							<span><?php esc_html_e( 'Auction goes live in', 'codex-ajax-auctions' ); ?></span>
-							<strong data-codfaa-lock-timer><?php echo esc_html( $prelive_initial_formatted ); ?></strong>
-						</p>
-						<p class="codfaa-lock-footer"><?php esc_html_e( 'Good luck!', 'codex-ajax-auctions' ); ?></p>
-					</div>
-				</article>
-				<article class="<?php echo esc_attr( $ended_stage_classes ); ?>" data-codfaa-stage="ended">
-					<header class="codfaa-stage__header">
-						<div class="codfaa-stage__title">
-							<span class="codfaa-stage__badge">4</span>
-							<p><?php esc_html_e( 'Auction ended', 'codex-ajax-auctions' ); ?></p>
-						</div>
-						<div class="codfaa-stage__status">
-							<span class="codfaa-stage__status-icon codfaa-stage__status-icon--check" aria-hidden="true"><?php echo codfaa_stage_icon_markup( 'check' ); ?></span>
-							<span class="codfaa-stage__status-icon codfaa-stage__status-icon--lock" aria-hidden="true"><?php echo codfaa_stage_icon_markup( 'lock' ); ?></span>
-						</div>
-					</header>
-					<div class="codfaa-stage__body">
-						<div class="codfaa-result-card">
-							<div class="codfaa-bid-result <?php echo esc_attr( $result_variant ? 'is-' . $result_variant : '' ); ?>" data-codfaa-winner-summary><?php echo $result_text ? wp_kses_post( $result_text ) : esc_html__( 'Results will appear once the auction ends.', 'codex-ajax-auctions' ); ?></div>
-							<a href="#" class="<?php echo esc_attr( $claim_classes ); ?>" data-auction="<?php echo esc_attr( $auction->ID ); ?>" data-label="<?php echo esc_attr( $claim_label ); ?>" aria-hidden="<?php echo esc_attr( $ended && $user_is_winner && ! $winner_claimed ? 'false' : 'true' ); ?>"><?php echo esc_html( $claim_label ); ?></a>
-						</div>
-					</div>
-				</article>
-			</section>
-		</div>
-	</div>
-</div>
-<div class="codfaa-product-modal" data-codfaa-modal="<?php echo esc_attr( $modal_id ); ?>" aria-hidden="true">
-	<div class="codfaa-product-modal__overlay" data-codfaa-modal-close></div>
-	<div class="codfaa-product-modal__dialog" role="dialog" aria-modal="true">
-		<button type="button" class="codfaa-product-modal__close" data-codfaa-modal-close aria-label="<?php esc_attr_e( 'Close quick view', 'codex-ajax-auctions' ); ?>">&times;</button>
-		<div class="codfaa-product-modal__media"><?php echo wp_kses_post( $product_image ); ?></div>
-		<div class="codfaa-product-modal__body">
-			<h3><?php echo esc_html( $product_name ); ?></h3>
-			<p><?php esc_html_e( 'Full product details available on the product page.', 'codex-ajax-auctions' ); ?></p>
-			<p class="codfaa-product-modal__price"><?php echo wp_kses_post( $product_price ); ?></p>
-			<?php if ( ! empty( $product_link ) ) : ?>
-				<a class="codfaa-btn codfaa-btn--dark" target="_blank" rel="noopener" href="<?php echo esc_url( $product_link ); ?>"><?php esc_html_e( 'Open product page', 'codex-ajax-auctions' ); ?></a>
-			<?php endif; ?>
-		</div>
-	</div>
-</div>
+            <div class="mt-4 grid sm:grid-cols-2 gap-4">
+              <div class="p-4 border rounded-xl">
+                <div class="text-sm text-gray-600">Registration fee</div>
+                <div class="text-xl font-bold">€1</div>
+              </div>
+              <div id="statusBox" class="p-4 border rounded-xl bg-rose-50">
+                <div class="text-sm text-gray-600">Status</div>
+                <div id="regStatus" class="text-xl font-semibold text-rose-700">Not registered</div>
+              </div>
+            </div>
 
-<?php if ( $terms_content ) : ?>
-	<div class="codfaa-terms-modal" data-codfaa-terms-modal aria-hidden="true">
-		<div class="codfaa-terms-modal__overlay" data-codfaa-terms-close></div>
-		<div class="codfaa-terms-modal__dialog" role="dialog" aria-modal="true" aria-label="<?php esc_attr_e( 'Terms & Conditions', 'codex-ajax-auctions' ); ?>">
-			<button type="button" class="codfaa-terms-modal__close" data-codfaa-terms-close aria-label="<?php esc_attr_e( 'Close Terms & Conditions', 'codex-ajax-auctions' ); ?>">&times;</button>
-			<div class="codfaa-terms-modal__content">
-				<?php echo wp_kses_post( $terms_content ); ?>
-			</div>
-		</div>
-	</div>
-<?php endif; ?>
+            <label class="mt-4 flex items-start gap-3 text-sm text-gray-700">
+              <input id="terms" type="checkbox" class="mt-1 h-4 w-4 rounded border-gray-300">
+              <span>I accept the Terms &amp; Conditions (demo).</span>
+            </label>
+
+            <button id="registerBtn"
+                    class="mt-4 w-full px-4 py-3 rounded-xl bg-black text-white text-sm font-medium">
+              Register &amp; Reserve Spot (€1)
+            </button>
+
+            <p id="shareHint" class="mt-3 text-sm text-gray-700 hidden">
+              Registration complete. Lobby is filling—share the auction to reach 100%.
+            </p>
+          </div>
+        </div>
+
+        <!-- STEP 2: Countdown to live -->
+        <div class="border rounded-2xl p-6 shadow-sm">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center justify-center h-7 w-7 rounded-full bg-black text-white text-xs font-semibold">2</span>
+              <h2 class="text-lg font-semibold">Countdown to live</h2>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="s2Check" class="hidden text-green-600">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </span>
+              <span id="s2Lock" class="text-gray-500">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        d="M17 11V8a5 5 0 10-10 0v3"/>
+                  <rect x="6" y="11" width="12" height="9" rx="2" ry="2" stroke-width="2"/>
+                </svg>
+              </span>
+            </div>
+          </div>
+
+          <div id="step2Body" class="mt-4 hidden">
+            <div class="flex items-center justify-between">
+              <p class="text-sm text-gray-700">
+                We’re giving all participants some time to get ready.
+              </p>
+              <div class="text-right">
+                <div class="text-xs text-gray-500 uppercase tracking-wide">Starts in</div>
+                <div class="text-2xl font-extrabold"><span id="preliveSec">10</span>s</div>
+              </div>
+            </div>
+
+            <div class="mt-4 h-2 bg-gray-200 rounded">
+              <div id="preliveBar" class="h-2 bg-black rounded" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 3: Live bidding -->
+        <div class="border rounded-2xl p-6 shadow-sm">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items center gap-2">
+              <span class="inline-flex items-center justify-center h-7 w-7 rounded-full bg-black text-white text-xs font-semibold">3</span>
+              <h2 class="text-lg font-semibold">Live Bidding</h2>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="s3Check" class="hidden text-green-600">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </span>
+              <span id="s3Lock" class="text-gray-500">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        d="M17 11V8a5 5 0 10-10 0v3"/>
+                  <rect x="6" y="11" width="12" height="9" rx="2" ry="2" stroke-width="2"/>
+                </svg>
+              </span>
+            </div>
+          </div>
+
+          <div id="step3Body" class="mt-4 hidden">
+            <div class="flex items-center justify-between text-sm text-gray-600 mb-2">
+              <span>Live timer</span>
+              <span>Timer: <span id="liveTimer">10</span>s</span>
+            </div>
+
+            <div class="h-2 bg-gray-200 rounded">
+              <div id="liveBar" class="h-2 bg-black rounded" style="width:100%"></div>
+            </div>
+
+            <div class="mt-4 grid grid-cols-3 gap-4 text-sm text-gray-800">
+              <div class="p-3 border rounded-xl">
+                <div class="text-xs text-gray-500">Your bids</div>
+                <div class="text-lg font-semibold"><span id="myBids">0</span></div>
+              </div>
+              <div class="p-3 border rounded-xl">
+                <div class="text-xs text-gray-500">Your current cost</div>
+                <div class="text-lg font-semibold">€<span id="myCost">0</span></div>
+              </div>
+              <div id="statusPill" class="p-3 border rounded-xl bg-red-50">
+                <div class="text-xs text-gray-500">Status</div>
+                <div id="statusText" class="text-lg font-semibold text-red-700">Outbid</div>
+              </div>
+            </div>
+
+            <ul id="history" class="mt-4 space-y-1 text-sm text-gray-700 border rounded-xl p-3">
+              <!-- History rows injected here -->
+            </ul>
+
+            <button id="bidBtn"
+                    class="mt-4 w-full px-4 py-3 rounded-xl bg-black text-white text-sm font-medium"
+                    disabled>
+              Place Bid (€1)
+            </button>
+          </div>
+        </div>
+
+        <!-- STEP 4: Auction ended -->
+        <div class="border rounded-2xl p-6 shadow-sm">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center justify-center h-7 w-7 rounded-full bg-black text-white text-xs font-semibold">4</span>
+              <h2 class="text-lg font-semibold">Auction Ended</h2>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="s4Check" class="hidden text-green-600">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </span>
+              <span id="s4Lock" class="text-gray-500">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        d="M17 11V8a5 5 0 10-10 0v3"/>
+                  <rect x="6" y="11" width="12" height="9" rx="2" ry="2" stroke-width="2"/>
+                </svg>
+              </span>
+            </div>
+          </div>
+
+          <div id="step4Body" class="mt-4 hidden">
+            <div id="resultWin" class="hidden mt-4 p-4 rounded-xl bg-green-100 border border-green-400 text-green-800 font-semibold text-center">
+              You’re the winner! You can claim your reward for <span id="claimAmount">€0</span>.
+            </div>
+            <div id="resultLose" class="hidden mt-4 p-4 rounded-xl bg-red-100 border border-red-400 text-red-700 font-semibold text-center">
+              You were outbid. You don’t pay for your bids.
+            </div>
+
+            <button id="claimBtn"
+                    class="mt-4 w-full px-4 py-3 rounded-xl bg-black text-white text-sm font-medium hidden">
+              Claim now
+            </button>
+
+            <button id="restartBtn"
+                    class="mt-3 w-full px-4 py-3 rounded-xl border border-gray-400 text-gray-700 text-sm">
+              Restart Demo
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="border-t">
+    <div class="mx-auto max-w-6xl px-4 py-8 text-sm text-gray-600 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <p>© YourBrand</p>
+      <nav class="flex gap-6">
+        <a href="/terms" class="hover:underline">Terms</a>
+        <a href="/privacy" class="hover:underline">Privacy</a>
+        <a href="/contact" class="hover:underline">Contact</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script>
+  (function(){
+    const BID_PRICE = 1;
+
+    // Step 1
+    const terms       = document.getElementById('terms');
+    const registerBtn = document.getElementById('registerBtn');
+    const lobbyBar    = document.getElementById('lobbyBar');
+    const lobbyText   = document.getElementById('lobbyText');
+    const regStatus   = document.getElementById('regStatus');
+    const statusBox   = document.getElementById('statusBox');
+    const shareHint   = document.getElementById('shareHint');
+
+    const s1Check     = document.getElementById('s1Check');
+    const s1Lock      = document.getElementById('s1Lock');
+    const step1Body   = document.getElementById('step1Body');
+
+    // Step 2
+    const preliveSec  = document.getElementById('preliveSec');
+    const preliveBar  = document.getElementById('preliveBar');
+    const s2Check     = document.getElementById('s2Check');
+    const s2Lock      = document.getElementById('s2Lock');
+    const step2Body   = document.getElementById('step2Body');
+
+    // Step 3
+    const liveTimer   = document.getElementById('liveTimer');
+    const liveBar     = document.getElementById('liveBar');
+    const myBidsEl    = document.getElementById('myBids');
+    const myCostEl    = document.getElementById('myCost');
+    const statusPill  = document.getElementById('statusPill');
+    const statusText  = document.getElementById('statusText');
+    const historyEl   = document.getElementById('history');
+    const bidBtn      = document.getElementById('bidBtn');
+    const s3Check     = document.getElementById('s3Check');
+    const s3Lock      = document.getElementById('s3Lock');
+    const step3Body   = document.getElementById('step3Body');
+
+    // Step 4
+    const resultWin   = document.getElementById('resultWin');
+    const resultLose  = document.getElementById('resultLose');
+    const claimBtn    = document.getElementById('claimBtn');
+    const claimAmount = document.getElementById('claimAmount');
+    const restartBtn  = document.getElementById('restartBtn');
+    const s4Check     = document.getElementById('s4Check');
+    const s4Lock      = document.getElementById('s4Lock');
+    const step4Body   = document.getElementById('step4Body');
+
+    const fakeNames = ['Anon***1','Anon***2','Anon***3','Anon***4'];
+
+    let lobbyPct, registered, preSec, liveSec, liveInterval, lastBidder, myBids, autoOutbids, ended;
+    let done1, done2, done3, done4;
+
+    function setStage(active){
+      const steps = [
+        {body: step1Body, lock: s1Lock, check: s1Check, done: done1},
+        {body: step2Body, lock: s2Lock, check: s2Check, done: done2},
+        {body: step3Body, lock: s3Lock, check: s3Check, done: done3},
+        {body: step4Body, lock: s4Lock, check: s4Check, done: done4}
+      ];
+      steps.forEach((s, i)=>{
+        const idx = i+1;
+        if(idx === active){
+          s.body.classList.remove('hidden');
+          s.lock.classList.add('hidden');
+          if(s.done) s.check classList.remove('hidden'); else s.check.classList.add('hidden');
+        }else{
+          s.body.classList.add('hidden');
+          if(s.done){
+            s.check.classList.remove('hidden');
+            s.lock.classList.add('hidden');
+          }else{
+            s.check.classList.add('hidden');
+            s.lock.classList.remove('hidden');
+          }
+        }
+      });
+    }
+
+    function resetAll(){
+      lobbyPct   = 70;
+      registered = false;
+      preSec     = 10;
+      liveSec    = 10;
+      myBids     = 0;
+      autoOutbids= 2;
+      ended      = false;
+      done1 = done2 = done3 = done4 = false;
+      clearInterval(liveInterval);
+
+      // Step 1 visuals
+      lobbyBar.style.width = lobbyPct + '%';
+      lobbyText.textContent = 'Lobby progress: ' + lobbyPct + '%';
+      regStatus.textContent = 'Not registered';
+      regStatus.classList.remove('text-green-700');
+      regStatus.classList.add('text-rose-700');
+      statusBox.classList.remove('bg-green-50');
+      statusBox.classList.add('bg-rose-50');
+      shareHint.classList.add('hidden');
+      terms.checked = false;
+
+      // Step 2 visuals
+      preliveSec.textContent = preSec;
+      preliveBar.style.width = '0%';
+
+      // Step 3 visuals
+      liveSec = 10;
+      liveTimer.textContent = liveSec;
+      liveBar.style.width = '100%';
+      myBidsEl.textContent = '0';
+      myCostEl.textContent = '0';
+      statusPill.classList.remove('bg-green-50');
+      statusPill.classList.add('bg-red-50');
+      statusText.textContent = 'Outbid';
+      statusText.classList.remove('text-green-700');
+      statusText.classList.add('text-red-700');
+      historyEl.innerHTML = '';
+      bidBtn.disabled = true;
+
+      // Step 4 visuals
+      resultWin.classList.add('hidden');
+      resultLose.classList.add('hidden');
+      claimBtn.classList.add('hidden');
+
+      setStage(1);
+    }
+
+    function addHistory(name, cost){
+      const row = document.createElement('li');
+      row.textContent = `Time: ${new Date().toLocaleTimeString()}  |  Name: ${name}  |  Cost: ${cost} Eur`;
+      historyEl.prepend(row);
+      while(historyEl.children.length > 5){
+        historyEl.removeChild(historyEl.lastChild);
+      }
+    }
+
+    function setWinning(isWinning){
+      if(isWinning){
+        statusPill.classList.remove('bg-red-50');
+        statusPill.classList.add('bg-green-50');
+        statusText.classList.remove('text-red-700');
+        statusText.classList.add('text-green-700');
+        statusText.textContent = 'Winning';
+      }else{
+        statusPill.classList.remove('bg-green-50');
+        statusPill.classList.add('bg-red-50');
+        statusText.classList.remove('text-green-700');
+        statusText.classList.add('text-red-700');
+        statusText.textContent = 'Outbid';
+      }
+    }
+
+    function startPrelive(){
+      done1 = true;
+      setStage(2);
+      const int = setInterval(()=>{
+        preSec--;
+        if(preSec < 0){
+          clearInterval(int);
+          done2 = true;
+          startLive();
+          return;
+        }
+        preliveSec.textContent = preSec;
+        preliveBar.style.width = ((10 - preSec) / 10) * 100 + '%';
+      }, 600); // fast demo
+    }
+
+    function startLive(){
+      setStage(3);
+
+      // reset live timer when going live
+      liveSec = 10;
+      liveTimer.textContent = liveSec;
+      liveBar.style.width = '100%';
+
+      // seed anon bids
+      const n1 = fakeNames[0], n2 = fakeNames[1];
+      addHistory(n1, BID_PRICE);
+      addHistory(n2, BID_PRICE);
+      lastBidder = n2;
+      setWinning(false);
+      bidBtn.disabled = false;
+
+      liveInterval = setInterval(()=>{
+        if(ended) return;
+        liveSec--;
+        if(liveSec <= 0){
+          clearInterval(liveInterval);
+          endAuction();
+          return;
+        }
+        liveTimer.textContent = liveSec;
+        liveBar.style.width = (liveSec / 10) * 100 + '%';
+      }, 1000);
+    }
+
+    function endAuction(){
+      ended = true;
+      bidBtn.disabled = true;
+      done3 = true;
+      done4 = true;
+      setStage(4);
+
+      if(lastBidder === 'You'){
+        const cost = myBids * BID_PRICE;
+        claimAmount.textContent = '€' + cost;
+        resultWin.classList.remove('hidden');
+        claimBtn.classList.remove('hidden');
+      }else{
+        resultLose.classList.remove('hidden');
+      }
+    }
+
+    registerBtn.addEventListener('click', ()=>{
+      if(registered) return;
+      if(!terms.checked){
+        regStatus.textContent = 'Please accept Terms first';
+        return;
+      }
+      registered = true;
+      regStatus.textContent = 'Registered';
+      regStatus.classList.remove('text-rose-700');
+      regStatus.classList.add('text-green-700');
+      statusBox.classList.remove('bg-rose-50');
+      statusBox.classList.add('bg-green-50');
+      shareHint.classList.remove('hidden');
+
+      // animate lobby to 100 then start prelive
+      const fill = setInterval(()=>{
+        lobbyPct += 5;
+        if(lobbyPct >= 100){
+          lobbyPct = 100;
+          clearInterval(fill);
+          startPrelive();
+        }
+        lobbyBar.style.width = lobbyPct + '%';
+        lobbyText.textContent = 'Lobby progress: ' + lobbyPct + '%';
+      }, 180);
+    });
+
+    bidBtn.addEventListener('click', ()=>{
+      if(ended) return;
+      myBids++;
+      myBidsEl.textContent = String(myBids);
+      myCostEl.textContent = String(myBids * BID_PRICE);
+      lastBidder = 'You';
+      setWinning(true);
+      addHistory('You', BID_PRICE);
+
+      // reset timer on your bid
+      liveSec = 10;
+      liveTimer.textContent = liveSec;
+      liveBar.style.width = '100%';
+
+      if(autoOutbids > 0){
+        const delay = 1000 + Math.random()*1500;
+        const name = fakeNames[Math.floor(Math.random()*fakeNames.length)];
+        autoOutbids--;
+        setTimeout(()=>{
+          if(ended) return;
+          lastBidder = name;
+          setWinning(false);
+          addHistory(name, BID_PRICE);
+
+          // reset timer on anon bid as well
+          liveSec = 10;
+          liveTimer.textContent = liveSec;
+          liveBar.style.width = '100%';
+        }, delay);
+      }
+    });
+
+    restartBtn.addEventListener('click', resetAll);
+
+    claimBtn.addEventListener('click', ()=>{
+      alert('Demo only: in a real system you would be redirected to checkout.');
+    });
+
+    resetAll();
+  })();
+  </script>
+</body>
+</html>
