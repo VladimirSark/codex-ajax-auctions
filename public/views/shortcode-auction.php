@@ -4,6 +4,42 @@
  */
 
 defined( 'ABSPATH' ) || exit;
+
+$auction_id = ( isset( $auction ) && $auction instanceof WP_Post ) ? $auction->ID : 0;
+
+$product_obj      = ( isset( $product ) && $product instanceof WC_Product ) ? $product : null;
+$registration_obj = ( isset( $registration ) && $registration instanceof WC_Product ) ? $registration : null;
+$bid_product_obj  = ( isset( $bid_product ) && $bid_product instanceof WC_Product ) ? $bid_product : null;
+
+$product_name = $product_obj ? $product_obj->get_name() : ( $auction instanceof WP_Post ? get_the_title( $auction ) : __( 'Auction product', 'codex-ajax-auctions' ) );
+
+$product_price_html = $product_obj ? $product_obj->get_price_html() : __( 'Not available', 'codex-ajax-auctions' );
+$registration_price  = $registration_obj ? $registration_obj->get_price_html() : __( 'Not set', 'codex-ajax-auctions' );
+$bid_fee_price       = $bid_product_obj ? $bid_product_obj->get_price_html() : __( 'Not set', 'codex-ajax-auctions' );
+
+$product_price_plain = trim( wp_strip_all_tags( $product_price_html ) );
+$registration_plain  = trim( wp_strip_all_tags( $registration_price ) );
+$bid_fee_plain       = trim( wp_strip_all_tags( $bid_fee_price ) );
+
+$product_image_url = '';
+if ( $product_obj && $product_obj->get_image_id() ) {
+	$product_image_url = wp_get_attachment_image_url( $product_obj->get_image_id(), 'large' );
+}
+if ( ! $product_image_url ) {
+	$product_image_url = wc_placeholder_img_src();
+}
+
+$product_excerpt = '';
+if ( $product_obj ) {
+	$product_excerpt = $product_obj->get_short_description();
+	if ( '' === trim( $product_excerpt ) ) {
+		$product_excerpt = $product_obj->get_description();
+	}
+}
+$product_excerpt = $product_excerpt ? wpautop( $product_excerpt ) : '';
+
+$product_view_url = ! empty( $product_link ) ? $product_link : ( $product_obj ? $product_obj->get_permalink() : '' );
+$modal_id         = 'codfaa-product-modal-' . ( $auction_id ? $auction_id : wp_generate_uuid4() );
 ?>
 <!doctype html>
 <html lang="en">
@@ -47,40 +83,59 @@ defined( 'ABSPATH' ) || exit;
       <div class="flex flex-col h-full">
         <div class="border rounded-2xl p-6 shadow-sm flex-1">
           <div class="flex items-center justify-between">
-            <strong>Gymtek Mini Bike XMB200 (LCD)</strong>
-            <span class="text-sm text-gray-500">Retail: €50</span>
+            <strong><?php echo esc_html( $product_name ); ?></strong>
+            <span class="text-sm text-gray-500">
+              <?php
+              if ( $product_price_plain ) {
+                  printf( esc_html__( 'Retail: %s', 'codex-ajax-auctions' ), esc_html( $product_price_plain ) );
+              } else {
+                  esc_html_e( 'Retail: N/A', 'codex-ajax-auctions' );
+              }
+              ?>
+            </span>
           </div>
 
           <!-- Bigger image -->
           <div class="mt-4">
             <img
               decoding="async"
-              src="https://www.1ba.lt/wp-content/uploads/2025/11/Gymtek-Mini-Bike-XMB200-LCD-1400x1400-1.webp"
-              alt="Gymtek Mini Bike XMB200"
+              src="<?php echo esc_url( $product_image_url ); ?>"
+              alt="<?php echo esc_attr( $product_name ); ?>"
               class="w-full max-h-80 mx-auto rounded-xl object-contain border"
             >
           </div>
 
           <!-- Info under image -->
           <div class="mt-4 text-sm text-gray-700 space-y-1">
-            <p><span class="font-medium">Retail:</span> €50</p>
-            <p>• Claim it for €1 at checkout if you win.</p>
-            <p>• Registration fee: €1</p>
-            <p>• Bid fee: €1 per bid</p>
+            <p><span class="font-medium"><?php esc_html_e( 'Retail:', 'codex-ajax-auctions' ); ?></span> <?php echo wp_kses_post( $product_price_html ); ?></p>
+            <p>• <?php printf( esc_html__( 'Claim it for %s at checkout if you win.', 'codex-ajax-auctions' ), $registration_plain ? esc_html( $registration_plain ) : esc_html__( '—', 'codex-ajax-auctions' ) ); ?></p>
+            <p>• <?php esc_html_e( 'Registration fee:', 'codex-ajax-auctions' ); ?> <?php echo wp_kses_post( $registration_price ); ?></p>
+            <p>• <?php esc_html_e( 'Bid fee:', 'codex-ajax-auctions' ); ?> <?php echo wp_kses_post( $bid_fee_price ); ?></p>
             <p class="pt-2">
-              Compact mini bike trainer with LCD display for time, distance and calories. Perfect for
-              under-desk pedaling or low-impact home workouts.
+              <?php
+              if ( $product_excerpt ) {
+                  echo wp_kses_post( $product_excerpt );
+              } else {
+                  esc_html_e( 'Compact mini bike trainer with LCD display for time, distance and calories. Perfect for under-desk pedaling or low-impact home workouts.', 'codex-ajax-auctions' );
+              }
+              ?>
             </p>
           </div>
 
           <!-- Buttons under description -->
           <div class="mt-4 flex items-center gap-4">
-            <button class="px-4 py-2 rounded-xl bg-black text-white text-sm">
-              Quick View
+            <button type="button" class="px-4 py-2 rounded-xl bg-black text-white text-sm" data-quick-view="open" data-modal-target="<?php echo esc_attr( $modal_id ); ?>">
+              <?php esc_html_e( 'Quick View', 'codex-ajax-auctions' ); ?>
             </button>
-            <a href="#" class="text-sm text-gray-800 underline">
-              View product
-            </a>
+            <?php if ( $product_view_url ) : ?>
+              <a href="<?php echo esc_url( $product_view_url ); ?>" target="_blank" rel="noopener" class="text-sm text-gray-800 underline">
+                <?php esc_html_e( 'View product', 'codex-ajax-auctions' ); ?>
+              </a>
+            <?php else : ?>
+              <span class="text-sm text-gray-400 underline decoration-dotted cursor-not-allowed" aria-disabled="true">
+                <?php esc_html_e( 'View product', 'codex-ajax-auctions' ); ?>
+              </span>
+            <?php endif; ?>
           </div>
         </div>
 
@@ -306,6 +361,43 @@ defined( 'ABSPATH' ) || exit;
     </div>
   </footer>
 
+  <div id="<?php echo esc_attr( $modal_id ); ?>" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 px-4" aria-hidden="true" role="dialog">
+    <div class="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl" data-modal-dialog>
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h3 class="text-lg font-semibold text-gray-900"><?php echo esc_html( $product_name ); ?></h3>
+          <p class="text-sm text-gray-500 mt-1"><?php echo wp_kses_post( $product_price_html ); ?></p>
+        </div>
+        <button type="button" class="text-gray-500 hover:text-gray-900" data-modal-close>
+          <span class="sr-only"><?php esc_html_e( 'Close quick view', 'codex-ajax-auctions' ); ?></span>
+          &times;
+        </button>
+      </div>
+
+      <div class="mt-4">
+        <img src="<?php echo esc_url( $product_image_url ); ?>" alt="<?php echo esc_attr( $product_name ); ?>" class="w-full rounded-xl border object-contain max-h-72">
+      </div>
+
+      <div class="mt-4 text-sm text-gray-700 space-y-2">
+        <?php
+        if ( $product_excerpt ) {
+            echo wp_kses_post( $product_excerpt );
+        } else {
+            esc_html_e( 'Full product details coming soon.', 'codex-ajax-auctions' );
+        }
+        ?>
+      </div>
+
+      <?php if ( $product_view_url ) : ?>
+        <div class="mt-6 text-right">
+          <a href="<?php echo esc_url( $product_view_url ); ?>" target="_blank" rel="noopener" class="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-black text-white text-sm font-medium">
+            <?php esc_html_e( 'Open product page', 'codex-ajax-auctions' ); ?>
+          </a>
+        </div>
+      <?php endif; ?>
+    </div>
+  </div>
+
   <script>
   (function(){
     const BID_PRICE = 1;
@@ -354,6 +446,9 @@ defined( 'ABSPATH' ) || exit;
     const step4Body   = document.getElementById('step4Body');
 
     const fakeNames = ['Anon***1','Anon***2','Anon***3','Anon***4'];
+
+    const productModal = document.getElementById('<?php echo esc_js( $modal_id ); ?>');
+    const quickViewTriggers = document.querySelectorAll('[data-modal-target="<?php echo esc_js( $modal_id ); ?>"]');
 
     let lobbyPct, registered, preSec, liveSec, liveInterval, lastBidder, myBids, autoOutbids, ended;
     let done1, done2, done3, done4;
@@ -585,6 +680,42 @@ defined( 'ABSPATH' ) || exit;
     });
 
     resetAll();
+
+    if ( productModal && quickViewTriggers.length ) {
+      const closeButtons = productModal.querySelectorAll('[data-modal-close]');
+
+      const openModal = function() {
+        productModal.classList.remove('hidden');
+        productModal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('overflow-hidden');
+      };
+
+      const closeModal = function() {
+        productModal.classList.add('hidden');
+        productModal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('overflow-hidden');
+      };
+
+      quickViewTriggers.forEach((btn) => {
+        btn.addEventListener('click', openModal);
+      });
+
+      closeButtons.forEach((btn) => {
+        btn.addEventListener('click', closeModal);
+      });
+
+      productModal.addEventListener('click', (event) => {
+        if (event.target === productModal) {
+          closeModal();
+        }
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !productModal.classList.contains('hidden')) {
+          closeModal();
+        }
+      });
+    }
   })();
   </script>
 </body>
