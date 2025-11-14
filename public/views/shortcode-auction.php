@@ -129,7 +129,6 @@ $modal_id         = 'codfaa-product-modal-' . ( $auction_id ? $auction_id : wp_g
               class="px-4 py-2 rounded-xl bg-black text-white text-sm"
               data-quick-view="open"
               data-modal-target="<?php echo esc_attr( $modal_id ); ?>"
-              onclick="codfaaToggleModal('<?php echo esc_js( $modal_id ); ?>', true);"
             >
               <?php esc_html_e( 'Quick View', 'codex-ajax-auctions' ); ?>
             </button>
@@ -367,40 +366,49 @@ $modal_id         = 'codfaa-product-modal-' . ( $auction_id ? $auction_id : wp_g
     </div>
   </footer>
 
-  <div id="<?php echo esc_attr( $modal_id ); ?>" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/60 px-4" aria-hidden="true" role="dialog">
-    <div class="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl" data-modal-dialog>
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <h3 class="text-lg font-semibold text-gray-900"><?php echo esc_html( $product_name ); ?></h3>
-          <p class="text-sm text-gray-500 mt-1"><?php echo wp_kses_post( $product_price_html ); ?></p>
+  <div
+    id="<?php echo esc_attr( $modal_id ); ?>"
+    class="fixed inset-0 z-50 hidden"
+    data-modal
+    aria-hidden="true"
+    role="dialog"
+  >
+    <button type="button" class="absolute inset-0 bg-black/60" data-modal-close aria-label="<?php esc_attr_e( 'Close quick view', 'codex-ajax-auctions' ); ?>"></button>
+    <div class="relative mx-auto flex min-h-full items-center justify-center px-4">
+      <div class="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h3 class="text-lg font-semibold text-gray-900"><?php echo esc_html( $product_name ); ?></h3>
+            <p class="text-sm text-gray-500 mt-1"><?php echo wp_kses_post( $product_price_html ); ?></p>
+          </div>
+          <button type="button" class="text-gray-500 hover:text-gray-900" data-modal-close>
+            <span class="sr-only"><?php esc_html_e( 'Close quick view', 'codex-ajax-auctions' ); ?></span>
+            &times;
+          </button>
         </div>
-        <button type="button" class="text-gray-500 hover:text-gray-900" data-modal-close onclick="codfaaToggleModal('<?php echo esc_js( $modal_id ); ?>', false);">
-          <span class="sr-only"><?php esc_html_e( 'Close quick view', 'codex-ajax-auctions' ); ?></span>
-          &times;
-        </button>
-      </div>
 
-      <div class="mt-4">
-        <img src="<?php echo esc_url( $product_image_url ); ?>" alt="<?php echo esc_attr( $product_name ); ?>" class="w-full rounded-xl border object-contain max-h-72">
-      </div>
-
-      <div class="mt-4 text-sm text-gray-700 space-y-2">
-        <?php
-        if ( $product_excerpt ) {
-            echo wp_kses_post( $product_excerpt );
-        } else {
-            esc_html_e( 'Full product details coming soon.', 'codex-ajax-auctions' );
-        }
-        ?>
-      </div>
-
-      <?php if ( $product_view_url ) : ?>
-        <div class="mt-6 text-right">
-          <a href="<?php echo esc_url( $product_view_url ); ?>" target="_blank" rel="noopener" class="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-black text-white text-sm font-medium">
-            <?php esc_html_e( 'Open product page', 'codex-ajax-auctions' ); ?>
-          </a>
+        <div class="mt-4">
+          <img src="<?php echo esc_url( $product_image_url ); ?>" alt="<?php echo esc_attr( $product_name ); ?>" class="w-full rounded-xl border object-contain max-h-72">
         </div>
-      <?php endif; ?>
+
+        <div class="mt-4 text-sm text-gray-700 space-y-2">
+          <?php
+          if ( $product_excerpt ) {
+              echo wp_kses_post( $product_excerpt );
+          } else {
+              esc_html_e( 'Full product details coming soon.', 'codex-ajax-auctions' );
+          }
+          ?>
+        </div>
+
+        <?php if ( $product_view_url ) : ?>
+          <div class="mt-6 text-right">
+            <a href="<?php echo esc_url( $product_view_url ); ?>" target="_blank" rel="noopener" class="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-black text-white text-sm font-medium">
+              <?php esc_html_e( 'Open product page', 'codex-ajax-auctions' ); ?>
+            </a>
+          </div>
+        <?php endif; ?>
+      </div>
     </div>
   </div>
 
@@ -452,10 +460,6 @@ $modal_id         = 'codfaa-product-modal-' . ( $auction_id ? $auction_id : wp_g
     const step4Body   = document.getElementById('step4Body');
 
     const fakeNames = ['Anon***1','Anon***2','Anon***3','Anon***4'];
-
-    const quickViewModalId = '<?php echo esc_js( $modal_id ); ?>';
-    const productModal = document.getElementById( quickViewModalId );
-    const quickViewTriggers = document.querySelectorAll('[data-modal-target="<?php echo esc_js( $modal_id ); ?>"]');
 
     let lobbyPct, registered, preSec, liveSec, liveInterval, lastBidder, myBids, autoOutbids, ended;
     let done1, done2, done3, done4;
@@ -688,48 +692,64 @@ $modal_id         = 'codfaa-product-modal-' . ( $auction_id ? $auction_id : wp_g
 
     resetAll();
 
-    window.codfaaToggleModal = window.codfaaToggleModal || function( id, shouldOpen ) {
-      var modal = document.getElementById( id );
-      if ( ! modal ) {
+  })();
+  </script>
+
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    function openModal(modal) {
+      modal.classList.remove('hidden');
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('overflow-hidden');
+    }
+
+    function closeModal(modal) {
+      modal.classList.add('hidden');
+      modal.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('overflow-hidden');
+    }
+
+    document.querySelectorAll('[data-quick-view]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var targetId = btn.getAttribute('data-modal-target');
+        if (!targetId) {
+          return;
+        }
+        var modal = document.getElementById(targetId);
+        if (modal) {
+          openModal(modal);
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-modal-close]').forEach(function(closeBtn) {
+      closeBtn.addEventListener('click', function() {
+        var modal = closeBtn.closest('[data-modal]');
+        if (modal) {
+          closeModal(modal);
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-modal]').forEach(function(modal) {
+      modal.addEventListener('click', function(event) {
+        if (event.target === modal) {
+          closeModal(modal);
+        }
+      });
+    });
+
+    document.addEventListener('keydown', function(event) {
+      if (event.key !== 'Escape') {
         return;
       }
-
-      if ( shouldOpen ) {
-        modal.classList.remove( 'hidden' );
-        modal.setAttribute( 'aria-hidden', 'false' );
-        document.body.classList.add( 'overflow-hidden' );
-      } else {
-        modal.classList.add( 'hidden' );
-        modal.setAttribute( 'aria-hidden', 'true' );
-        document.body.classList.remove( 'overflow-hidden' );
-      }
-    };
-
-    if ( quickViewTriggers.length ) {
-      quickViewTriggers.forEach((btn) => {
-        btn.addEventListener('click', () => window.codfaaToggleModal( quickViewModalId, true ));
-      });
-    }
-
-    if ( productModal ) {
-      const closeButtons = productModal.querySelectorAll('[data-modal-close]');
-      closeButtons.forEach((btn) => {
-        btn.addEventListener('click', () => window.codfaaToggleModal( quickViewModalId, false ));
-      });
-
-      productModal.addEventListener('click', (event) => {
-        if ( event.target === productModal ) {
-          window.codfaaToggleModal( quickViewModalId, false );
+      document.querySelectorAll('[data-modal]').forEach(function(modal) {
+        if (!modal.classList.contains('hidden')) {
+          closeModal(modal);
         }
       });
-
-      document.addEventListener('keydown', (event) => {
-        if ( event.key === 'Escape' && ! productModal.classList.contains('hidden') ) {
-          window.codfaaToggleModal( quickViewModalId, false );
-        }
-      });
-    }
-  })();
+    });
+  });
   </script>
 </body>
 </html>
