@@ -406,72 +406,76 @@ class Auction_Shortcode {
 	 * @param int $user_id    User ID.
 	 * @return bool
 	 */
-	private function user_has_pending_registration( $auction_id, $user_id ) {
-		if ( ! $auction_id || ! $user_id ) {
-			return false;
-		}
+        private function user_has_pending_registration( $auction_id, $user_id ) {
+                if ( ! $auction_id || ! $user_id ) {
+                        return false;
+                }
 
-		$meta_key      = '_codfaa_pending_registration_' . absint( $auction_id );
-		$pending_order = (int) get_user_meta( $user_id, $meta_key, true );
+                $pending_statuses = array( 'pending', 'on-hold', Registration_Service::WAITING_STATUS );
+                $post_statuses    = array_merge(
+                        array( 'wc-pending', 'wc-on-hold' ),
+                        array( 'wc-' . Registration_Service::WAITING_STATUS ),
+                        $pending_statuses
+                );
 
-		if ( $pending_order ) {
-			$order = wc_get_order( $pending_order );
+                $meta_key      = '_codfaa_pending_registration_' . absint( $auction_id );
+                $pending_order = (int) get_user_meta( $user_id, $meta_key, true );
 
-			if ( $order instanceof WC_Order && in_array( $order->get_status(), array( 'pending', 'on-hold' ), true ) ) {
-				return true;
-			}
+                if ( $pending_order ) {
+                        $order = wc_get_order( $pending_order );
 
-			delete_user_meta( $user_id, $meta_key );
-		}
+                        if ( $order instanceof WC_Order && in_array( $order->get_status(), $pending_statuses, true ) ) {
+                                return true;
+                        }
 
-		$orders = array();
+                        delete_user_meta( $user_id, $meta_key );
+                }
 
-		if ( function_exists( 'wc_get_orders' ) ) {
-			$orders = wc_get_orders(
-				array(
-					'customer_id' => $user_id,
-					'limit'       => 1,
-					'return'      => 'ids',
-					'status'      => array( 'pending', 'on-hold' ),
-					'type'        => 'shop_order',
-					'meta_key'    => '_codfaa_return_auction',
-					'meta_value'  => $auction_id,
-				)
-			);
-		}
+                $orders = array();
 
-		if ( ! empty( $orders ) ) {
-			return true;
-		}
+                if ( function_exists( 'wc_get_orders' ) ) {
+                        $orders = wc_get_orders(
+                                array(
+                                        'customer_id' => $user_id,
+                                        'limit'       => 1,
+                                        'return'      => 'ids',
+                                        'status'      => $pending_statuses,
+                                        'type'        => 'shop_order',
+                                        'meta_key'    => '_codfaa_return_auction',
+                                        'meta_value'  => $auction_id,
+                                )
+                        );
+                }
 
-		global $wpdb;
+                if ( ! empty( $orders ) ) {
+                        return true;
+                }
 
-		$sql = <<<SQL
+                global $wpdb;
+
+                $placeholders = implode( ', ', array_fill( 0, count( $post_statuses ), '%s' ) );
+                $params       = array_merge( array( $auction_id, $user_id ), $post_statuses );
+
+                $sql = <<<SQL
 SELECT oi.order_id
 FROM {$wpdb->prefix}woocommerce_order_items AS oi
 INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta AS oim
-	ON oi.order_item_id = oim.order_item_id
+        ON oi.order_item_id = oim.order_item_id
 INNER JOIN {$wpdb->prefix}posts AS orders
-	ON oi.order_id = orders.ID
+        ON oi.order_id = orders.ID
 INNER JOIN {$wpdb->prefix}postmeta AS customer
-	ON orders.ID = customer.post_id AND customer.meta_key = '_customer_user'
+        ON orders.ID = customer.post_id AND customer.meta_key = '_customer_user'
 WHERE oim.meta_key = '_codfaa_auction_id'
-	AND oim.meta_value = %d
-	AND customer.meta_value = %d
-	AND orders.post_status IN ( 'wc-pending', 'wc-on-hold', 'pending', 'on-hold' )
+        AND oim.meta_value = %d
+        AND customer.meta_value = %d
+        AND orders.post_status IN ( {$placeholders} )
 LIMIT 1
 SQL;
 
-		$order_id = $wpdb->get_var(
-			$wpdb->prepare(
-				$sql,
-				$auction_id,
-				$user_id
-			)
-		);
+                $order_id = $wpdb->get_var( $wpdb->prepare( $sql, $params ) );
 
-		return ! empty( $order_id );
-	}
+                return ! empty( $order_id );
+        }
 
 
 	/**

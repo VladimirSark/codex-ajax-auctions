@@ -18,10 +18,15 @@ use WC_Product;
  */
 class Registration_Service {
 
-	/**
-	 * Nonce action identifier.
-	 */
-	public const NONCE_ACTION = 'codfaa_register';
+        /**
+         * Nonce action identifier.
+         */
+        public const NONCE_ACTION = 'codfaa_register';
+
+        /**
+         * Order status indicating a registration is awaiting admin approval.
+         */
+        public const WAITING_STATUS = 'codfaa-awaiting-approval';
 
 	/**
 	 * Session key for storing return URL data.
@@ -31,27 +36,30 @@ class Registration_Service {
 	/**
 	 * Boot hooks.
 	 */
-	public function boot() {
-		add_action( 'init', array( $this, 'register_assets' ) );
-		add_action( 'init', array( $this, 'maybe_upgrade_participant_table' ) );
-		add_action( 'wp_ajax_codfaa_register', array( $this, 'handle_registration' ) );
-		add_action( 'wp_ajax_nopriv_codfaa_register', array( $this, 'handle_registration_guest' ) );
-		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'mark_registration_line_item' ), 10, 4 );
-		add_action( 'woocommerce_checkout_create_order', array( $this, 'attach_registration_metadata' ), 10, 2 );
-		add_action( 'woocommerce_order_status_processing', array( $this, 'maybe_record_participant' ) );
-		add_action( 'woocommerce_order_status_completed', array( $this, 'maybe_record_participant' ) );
-		add_filter( 'woocommerce_get_return_url', array( $this, 'filter_return_url' ), 10, 2 );
-		add_action( 'woocommerce_thankyou', array( $this, 'maybe_render_return_notice' ), 20 );
-	}
+        public function boot() {
+                add_action( 'init', array( $this, 'register_assets' ) );
+                add_action( 'init', array( $this, 'maybe_upgrade_participant_table' ) );
+                add_action( 'init', array( $this, 'register_waiting_order_status' ) );
+                add_action( 'wp_ajax_codfaa_register', array( $this, 'handle_registration' ) );
+                add_action( 'wp_ajax_nopriv_codfaa_register', array( $this, 'handle_registration_guest' ) );
+                add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'mark_registration_line_item' ), 10, 4 );
+                add_action( 'woocommerce_checkout_create_order', array( $this, 'attach_registration_metadata' ), 10, 2 );
+                add_action( 'woocommerce_order_status_processing', array( $this, 'maybe_record_participant' ) );
+                add_action( 'woocommerce_order_status_completed', array( $this, 'maybe_record_participant' ) );
+                add_filter( 'woocommerce_payment_complete_order_status', array( $this, 'maybe_set_waiting_status' ), 10, 3 );
+                add_filter( 'woocommerce_get_return_url', array( $this, 'filter_return_url' ), 10, 2 );
+                add_action( 'woocommerce_thankyou', array( $this, 'maybe_render_return_notice' ), 20 );
+                add_filter( 'wc_order_statuses', array( $this, 'add_waiting_order_status' ) );
+        }
 
-	/**
-	 * Register and localize frontend assets used for registration.
-	 */
-	public function register_assets() {
-		wp_register_script(
-			'codfaa-auction-registration',
-			CODFAA_PLUGIN_URL . 'public/js/auction-registration.js',
-			array( 'jquery' ),
+        /**
+         * Register and localize frontend assets used for registration.
+         */
+        public function register_assets() {
+                wp_register_script(
+                        'codfaa-auction-registration',
+                        CODFAA_PLUGIN_URL . 'public/js/auction-registration.js',
+                        array( 'jquery' ),
 			\Codex_Ajax_Auctions::VERSION,
 			true
 		);
@@ -76,9 +84,96 @@ class Registration_Service {
 				'registeredLockCopy' => __( 'You are registered. Wait for the pre-live countdown.', 'codex-ajax-auctions' ),
 				'countdownCopy'     => __( 'Auction goes live in %s', 'codex-ajax-auctions' ),
 				'consentRequired' => __( 'Please accept the Terms & Conditions before registering.', 'codex-ajax-auctions' ),
-			)
-		);
-	}
+                        )
+                );
+        }
+
+        /**
+         * Register custom "Waiting for approval" order status for registrations.
+         */
+        public function register_waiting_order_status() {
+                register_post_status(
+                        'wc-' . self::WAITING_STATUS,
+                        array(
+                                'label'                     => _x( 'Waiting for approval', 'Order status', 'codex-ajax-auctions' ),
+                                'public'                    => true,
+                                'exclude_from_search'       => false,
+                                'show_in_admin_all_list'    => true,
+                                'show_in_admin_status_list' => true,
+                                'label_count'               => _n_noop( 'Waiting for approval (%s)', 'Waiting for approval (%s)', 'codex-ajax-auctions' ),
+                        )
+                );
+        }
+
+        /**
+         * Ensure WooCommerce lists the waiting status alongside other statuses.
+         *
+         * @param array<string,string> $statuses Order statuses.
+         * @return array<string,string>
+         */
+        public function add_waiting_order_status( $statuses ) {
+                $new_statuses = array();
+
+                foreach ( $statuses as $key => $label ) {
+                        $new_statuses[ $key ] = $label;
+
+                        if ( 'wc-on-hold' === $key ) {
+                                $new_statuses[ 'wc-' . self::WAITING_STATUS ] = _x( 'Waiting for approval', 'Order status', 'codex-ajax-auctions' );
+                        }
+                }
+
+                if ( ! isset( $new_statuses[ 'wc-' . self::WAITING_STATUS ] ) ) {
+                        $new_statuses[ 'wc-' . self::WAITING_STATUS ] = _x( 'Waiting for approval', 'Order status', 'codex-ajax-auctions' );
+                }
+
+                return $new_statuses;
+        }
+
+        /**
+         * Force registration orders to stay in a pending approval state after payment.
+         *
+         * @param string         $status   Proposed status.
+         * @param int            $order_id Order ID.
+         * @param WC_Order|false $order    Order instance.
+         * @return string
+         */
+        public function maybe_set_waiting_status( $status, $order_id, $order = false ) {
+                if ( ! $order instanceof WC_Order ) {
+                        $order = wc_get_order( $order_id );
+                }
+
+                if ( ! $order instanceof WC_Order ) {
+                        return $status;
+                }
+
+                if ( $this->order_contains_registration( $order ) ) {
+                        return self::WAITING_STATUS;
+                }
+
+                return $status;
+        }
+
+        /**
+         * Check whether an order contains a registration line item.
+         *
+         * @param WC_Order $order Order instance.
+         * @return bool
+         */
+        private function order_contains_registration( $order ) {
+                foreach ( $order->get_items() as $item ) {
+                        if ( ! $item instanceof WC_Order_Item_Product ) {
+                                continue;
+                        }
+
+                        $flag = (int) $item->get_meta( '_codfaa_auction_registration', true );
+
+                        if ( $flag ) {
+                                return true;
+                        }
+                }
+
+                return false;
+        }
 
 	/**
 	 * Handle AJAX requests for authenticated users joining an auction.
@@ -408,75 +503,83 @@ class Registration_Service {
 		}
 	}
 
-	/**
-	 * Check if the user has a pending registration order awaiting confirmation.
-	 *
-	 * @param int $auction_id Auction ID.
-	 * @param int $user_id    User ID.
-	 * @return bool
-	 */
-private function user_has_pending_registration( $auction_id, $user_id ) {
-		if ( ! $auction_id || ! $user_id ) {
-			return false;
-		}
+        /**
+         * Check if the user has a pending registration order awaiting confirmation.
+         *
+         * @param int $auction_id Auction ID.
+         * @param int $user_id    User ID.
+         * @return bool
+         */
+        private function user_has_pending_registration( $auction_id, $user_id ) {
+                if ( ! $auction_id || ! $user_id ) {
+                        return false;
+                }
 
-		$meta_key      = $this->get_pending_meta_key( $auction_id );
-		$pending_order = (int) get_user_meta( $user_id, $meta_key, true );
+                $pending_statuses = array( 'pending', 'on-hold', self::WAITING_STATUS );
+                $post_statuses    = array_merge(
+                        array( 'wc-pending', 'wc-on-hold' ),
+                        array( 'wc-' . self::WAITING_STATUS ),
+                        $pending_statuses
+                );
 
-		if ( $pending_order ) {
-			$order = wc_get_order( $pending_order );
+                $meta_key      = $this->get_pending_meta_key( $auction_id );
+                $pending_order = (int) get_user_meta( $user_id, $meta_key, true );
 
-			if ( $order instanceof WC_Order && in_array( $order->get_status(), array( 'pending', 'on-hold' ), true ) ) {
-				return true;
-			}
+                if ( $pending_order ) {
+                        $order = wc_get_order( $pending_order );
 
-			delete_user_meta( $user_id, $meta_key );
-		}
+                        if ( $order instanceof WC_Order && in_array( $order->get_status(), $pending_statuses, true ) ) {
+                                return true;
+                        }
 
-		$orders = array();
+                        delete_user_meta( $user_id, $meta_key );
+                }
 
-		if ( function_exists( 'wc_get_orders' ) ) {
-			$orders = wc_get_orders(
-				array(
-					'customer_id' => $user_id,
-					'limit'       => 1,
-					'return'      => 'ids',
-					'status'      => array( 'pending', 'on-hold' ),
-					'type'        => 'shop_order',
-					'meta_key'    => '_codfaa_return_auction',
-					'meta_value'  => $auction_id,
-				)
-			);
-		}
+                $orders = array();
 
-		if ( ! empty( $orders ) ) {
-			return true;
-		}
+                if ( function_exists( 'wc_get_orders' ) ) {
+                        $orders = wc_get_orders(
+                                array(
+                                        'customer_id' => $user_id,
+                                        'limit'       => 1,
+                                        'return'      => 'ids',
+                                        'status'      => $pending_statuses,
+                                        'type'        => 'shop_order',
+                                        'meta_key'    => '_codfaa_return_auction',
+                                        'meta_value'  => $auction_id,
+                                )
+                        );
+                }
 
-		global $wpdb;
+                if ( ! empty( $orders ) ) {
+                        return true;
+                }
 
-		$order_id = $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT oi.order_id
-				FROM {$wpdb->prefix}woocommerce_order_items AS oi
-				INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta AS oim
-					ON oi.order_item_id = oim.order_item_id
-				INNER JOIN {$wpdb->prefix}posts AS orders
-					ON oi.order_id = orders.ID
-				INNER JOIN {$wpdb->prefix}postmeta AS customer
-					ON orders.ID = customer.post_id AND customer.meta_key = '_customer_user'
-				WHERE oim.meta_key = '_codfaa_auction_id'
-					AND oim.meta_value = %d
-					AND customer.meta_value = %d
-					AND orders.post_status IN ( 'wc-pending', 'wc-on-hold', 'pending', 'on-hold' )
-				LIMIT 1",
-				$auction_id,
-				$user_id
-			)
-		);
+                global $wpdb;
 
-		return ! empty( $order_id );
-	}
+                $placeholders = implode( ', ', array_fill( 0, count( $post_statuses ), '%s' ) );
+                $params       = array_merge( array( $auction_id, $user_id ), $post_statuses );
+
+                $sql = <<<SQL
+SELECT oi.order_id
+FROM {$wpdb->prefix}woocommerce_order_items AS oi
+INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta AS oim
+        ON oi.order_item_id = oim.order_item_id
+INNER JOIN {$wpdb->prefix}posts AS orders
+        ON oi.order_id = orders.ID
+INNER JOIN {$wpdb->prefix}postmeta AS customer
+        ON orders.ID = customer.post_id AND customer.meta_key = '_customer_user'
+WHERE oim.meta_key = '_codfaa_auction_id'
+        AND oim.meta_value = %d
+        AND customer.meta_value = %d
+        AND orders.post_status IN ( {$placeholders} )
+LIMIT 1
+SQL;
+
+                $order_id = $wpdb->get_var( $wpdb->prepare( $sql, $params ) );
+
+                return ! empty( $order_id );
+        }
 
 	private function set_pending_registration_flag( $auction_id, $user_id, $order_id ) {
 		if ( ! $auction_id || ! $user_id ) {
@@ -605,3 +708,4 @@ private function user_has_pending_registration( $auction_id, $user_id ) {
 		wp_send_json_error( $data, $status );
 	}
 }
+
