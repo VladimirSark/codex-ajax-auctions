@@ -961,41 +961,57 @@ function applyStatusPayload( $card, state, payload ) {
 		claimLabel: $card.find( '.codfaa-claim-prize' ).data( 'label' )
 	} );
 
-	state.tickInterval = window.setInterval( function() {
-		if ( state.timerActive && state.remaining > 0 ) {
-			state.remaining -= 1;
-			updateTimerDisplay( $card, state.remaining );
-		}
+        var lastTickSeconds = Math.floor( Date.now() / 1000 );
 
-		if ( state.timerActive && state.remaining <= 0 ) {
-			state.timerActive = false;
-			state.remaining = 0;
+        state.tickInterval = window.setInterval( function() {
+                var nowSeconds = Math.floor( Date.now() / 1000 );
+                var elapsed = Math.max( 1, nowSeconds - lastTickSeconds );
+                lastTickSeconds = nowSeconds;
 
-			if ( isCurrentUserLastBidder( state ) ) {
-				state.awaitingWinnerConfirm = true;
-				showClaimSummaryFallback( $card, state );
-				toggleClaimButton( $card, state, {
-					ended: true,
-					userIsWinner: true,
-					winnerClaimed: state.winnerClaimed,
-					claimLabel: $card.find( '.codfaa-claim-prize' ).data( 'label' )
-				} );
-			}
+                if ( state.timerActive && state.remaining > 0 ) {
+                        state.remaining = Math.max( 0, state.remaining - elapsed );
+                        updateTimerDisplay( $card, state.remaining );
+                }
 
-			fetchStatus( $card, state );
-			startEndPolling( $card, state );
-		}
+                if ( state.timerActive && state.remaining <= 0 ) {
+                        state.timerActive = false;
+                        state.remaining = 0;
 
-		if ( state.preliveRemaining > 0 && state.phase !== 'live' && ! state.ended ) {
-			state.preliveRemaining -= 1;
-			updatePreliveTimer( $card, state.preliveRemaining, state.preliveBaseline );
-			updateLockBanner( $card, state );
+                        if ( isCurrentUserLastBidder( state ) ) {
+                                state.awaitingWinnerConfirm = true;
+                                showClaimSummaryFallback( $card, state );
+                                toggleClaimButton( $card, state, {
+                                        ended: true,
+                                        userIsWinner: true,
+                                        winnerClaimed: state.winnerClaimed,
+                                        claimLabel: $card.find( '.codfaa-claim-prize' ).data( 'label' )
+                                } );
+                        }
 
-			if ( state.preliveRemaining <= 0 ) {
-				fetchStatus( $card, state );
-			}
-		}
-	}, 1000 );
+                        fetchStatus( $card, state );
+                        startEndPolling( $card, state );
+                }
+
+                if ( state.phase !== 'live' && ! state.ended ) {
+                        if ( state.goLiveAt ) {
+                                state.preliveRemaining = Math.max( 0, state.goLiveAt - nowSeconds );
+                        } else if ( state.preliveRemaining > 0 ) {
+                                state.preliveRemaining = Math.max( 0, state.preliveRemaining - elapsed );
+                        }
+
+                        updatePreliveTimer( $card, state.preliveRemaining, state.preliveBaseline );
+                        updateLockBanner( $card, state );
+
+                        if ( state.preliveRemaining <= 0 && state.phase !== 'live' ) {
+                                state.phase = 'live';
+                                state.timerActive = ! state.ended;
+                                toggleTimerVisibility( $card, true );
+                                togglePreliveVisibility( $card, state );
+                                updateLockBanner( $card, state );
+                                fetchStatus( $card, state );
+                        }
+                }
+        }, 1000 );
 
 		var pollInterval = parseInt( CodfaaAuctionRegistration.statusInterval, 10 ) || 5000;
 
