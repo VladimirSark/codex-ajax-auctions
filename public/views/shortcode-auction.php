@@ -526,6 +526,8 @@ $prelive_bar_initial      = ( $prelive_duration > 0 && $prelive_initial_secs < $
 
   <script>
   document.addEventListener('DOMContentLoaded', function() {
+    var card = document.querySelector('.codfaa-auction-card');
+
     function openModal(modal) {
       modal.classList.remove('hidden');
       modal.setAttribute('aria-hidden', 'false');
@@ -578,7 +580,7 @@ $prelive_bar_initial      = ( $prelive_duration > 0 && $prelive_initial_secs < $
         }
       });
     });
-    if ( ! window.CodfaaAuctionRegistration ) {
+    if ( ! window.CodfaaAuctionRegistration && card ) {
       var preWrapper = card.querySelector('[data-codfaa-prelive-wrapper]');
       var preTimer = card.querySelector('[data-codfaa-prelive-timer]');
       var preBar = card.querySelector('[data-codfaa-timer-progress]');
